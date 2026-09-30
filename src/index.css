@@ -1,0 +1,386 @@
+@import 'tailwindcss';
+
+/* Dark mode is class-driven (`<html class="dark">`) so it can be toggled
+   from Settings without a media-query dependency. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ------------------------------------------------------------------ *
+ * EFMS Design Tokens
+ * Tailwind v4 exposes every token below as a utility, e.g.
+ *   --color-brand-600  ->  bg-brand-600 / text-brand-600 / border-brand-600
+ * Because utilities compile down to `var(--color-brand-600)`, the accent
+ * theme can be swapped at runtime from Settings without a rebuild.
+ * ------------------------------------------------------------------ */
+@theme {
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, Consolas, monospace;
+
+  /* Brand — default accent: the royal blue from the Level Up wordmark.
+     600 is the sampled ink (#044AA9) so primary buttons, links and the active
+     nav item carry the exact logo colour. */
+  --color-brand-50: #eef5fe;
+  --color-brand-100: #d9e8fd;
+  --color-brand-200: #b3d1f9;
+  --color-brand-300: #79acf1;
+  --color-brand-400: #3886f0;
+  --color-brand-500: #0a63dc;
+  --color-brand-600: #044aa9;
+  --color-brand-700: #053d89;
+  --color-brand-800: #07336f;
+  --color-brand-900: #072854;
+  --color-brand-950: #071a34;
+
+  /* Secondary brand — the emerald from the logo's globe. Redefining the
+     `emerald` namespace (rather than adding a parallel one) means every
+     success badge, progress bar and toast in the app picks it up, so the
+     secondary colour is the logo green everywhere instead of only in new
+     components. 600 is the sampled ink (#0A7F4A). */
+  --color-emerald-50: #effdf7;
+  --color-emerald-100: #d7f9ea;
+  --color-emerald-200: #b3f0d4;
+  --color-emerald-300: #7adcaf;
+  --color-emerald-400: #33d68c;
+  --color-emerald-500: #18b970;
+  --color-emerald-600: #0a7f4a;
+  --color-emerald-700: #0a673c;
+  --color-emerald-800: #095030;
+  --color-emerald-900: #093f26;
+  --color-emerald-950: #072417;
+
+  /* Neutrals — the interface is built on a slate base */
+  --color-ink-50: #f8fafc;
+  --color-ink-100: #f1f5f9;
+  --color-ink-200: #e5e9ef;
+  --color-ink-300: #cbd5e1;
+  --color-ink-400: #94a3b8;
+  --color-ink-500: #64748b;
+  --color-ink-600: #475569;
+  --color-ink-700: #334155;
+  --color-ink-800: #1e293b;
+  --color-ink-900: #0f172a;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-raised: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 6px -2px rgb(15 23 42 / 0.05);
+  --shadow-overlay: 0 24px 48px -12px rgb(15 23 42 / 0.24);
+
+  --radius-card: 0.625rem;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-ink-100 text-ink-800 font-sans antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'tnum';
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Tabular figures everywhere numbers are compared side by side */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-brand-600 outline-2 outline-offset-2;
+  }
+
+  ::selection {
+    @apply bg-brand-100 text-brand-900;
+  }
+
+  /* Scrollbars: visible enough to grab, quiet enough to ignore */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-ink-300) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--color-ink-300);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-ink-400);
+  }
+}
+
+@layer components {
+  /* Dense data tables keep their header pinned while the body scrolls */
+  .efms-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .efms-table thead th {
+    @apply bg-ink-50 text-ink-500 border-ink-200 sticky top-0 z-10 border-b px-3 py-2.5 text-[11px] font-semibold tracking-wider whitespace-nowrap uppercase;
+  }
+  .efms-table tbody td {
+    @apply border-ink-200/80 border-b px-3 py-2.5 align-middle;
+  }
+  .efms-table tbody tr:hover {
+    @apply bg-brand-50/40;
+  }
+  .efms-table[data-density='compact'] tbody td {
+    @apply py-1.5;
+  }
+  .efms-table[data-density='compact'] thead th {
+    @apply py-2;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Reduced-motion users get state changes without the movement */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes efms-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes efms-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes efms-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes efms-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-fade-in {
+  animation: efms-fade-in 0.15s ease-out both;
+}
+.animate-slide-up {
+  animation: efms-slide-up 0.18s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-slide-in-right {
+  animation: efms-slide-in-right 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.skeleton {
+  @apply bg-ink-200 relative overflow-hidden rounded;
+}
+.skeleton::after {
+  content: '';
+  @apply absolute inset-0;
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.55), transparent);
+  transform: translateX(-100%);
+  animation: efms-shimmer 1.4s infinite;
+}
+
+/* Print: reports and employer profiles should produce a clean sheet */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Dark theme
+ *
+ * Every surface in this application is expressed through the `ink` neutral
+ * ramp plus a small set of literal `white` / semantic-colour utilities.
+ * Rather than attaching a `dark:` variant to hundreds of elements, the ramp is
+ * inverted once here and the handful of exceptions are corrected explicitly.
+ *
+ * These rules are deliberately unlayered: unlayered CSS outranks Tailwind's
+ * `utilities` layer, so no `!important` or specificity juggling is required.
+ * The accent ramp is handled separately in `src/lib/theme.ts` because it is
+ * written to the root element as inline custom properties.
+ * ------------------------------------------------------------------ */
+
+.dark {
+  color-scheme: dark;
+
+  /* Inverted neutral ramp — surfaces at the low end, text at the high end. */
+  --color-ink-50: #0d1524;
+  --color-ink-100: #0a111e;
+  --color-ink-200: #1f2b41;
+  --color-ink-300: #33415a;
+  --color-ink-400: #64748b;
+  --color-ink-500: #94a3b8;
+  --color-ink-600: #b8c4d6;
+  --color-ink-700: #d3dbe8;
+  --color-ink-800: #e6ecf5;
+  --color-ink-900: #f4f7fb;
+
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.45), 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-raised: 0 6px 16px -4px rgb(0 0 0 / 0.55);
+  --shadow-overlay: 0 24px 48px -12px rgb(0 0 0 / 0.7);
+}
+
+/* Cards, dialogs, menus and form fields are painted `bg-white` in the light
+   theme; they become the elevated dark surface here. */
+.dark .bg-white {
+  background-color: #111a2c;
+}
+
+/* Inverse surfaces keep their dark treatment instead of following the ramp. */
+.dark .bg-ink-800 {
+  background-color: #33415a;
+}
+.dark .bg-ink-900,
+.dark .bg-ink-900\/50 {
+  background-color: rgb(2 6 23 / 0.72);
+}
+.dark .bg-ink-900 {
+  background-color: #33415a;
+}
+.dark .hover\:bg-ink-900:hover {
+  background-color: #3f4f6d;
+}
+
+/* Semantic chips: darken the fill so the lightened text stays legible. */
+.dark .bg-emerald-50,
+.dark .hover\:bg-emerald-50:hover {
+  background-color: #062e1f;
+}
+.dark .bg-amber-50 {
+  background-color: #452c05;
+}
+.dark .bg-rose-50,
+.dark .hover\:bg-rose-50:hover {
+  background-color: #4c0519;
+}
+.dark .bg-sky-50 {
+  background-color: #082f49;
+}
+.dark .bg-amber-100 {
+  background-color: #57380a;
+}
+.dark .bg-rose-100 {
+  background-color: #5c0a1f;
+}
+
+.dark .text-emerald-600,
+.dark .text-emerald-700 {
+  color: #7adcaf;
+}
+.dark .text-amber-600,
+.dark .text-amber-800 {
+  color: #fcd34d;
+}
+.dark .text-rose-600,
+.dark .text-rose-700 {
+  color: #fda4af;
+}
+.dark .text-sky-600,
+.dark .text-sky-700 {
+  color: #7dd3fc;
+}
+
+/* Table row hover is a brand wash rather than a light flood. */
+.dark .efms-table tbody tr:hover {
+  background-color: rgb(10 99 220 / 0.12);
+}
+
+.dark .skeleton::after {
+  background-image: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+}
+
+.dark ::selection {
+  background-color: #0b2c5e;
+  color: #e6ecf5;
+}
+
+/* ------------------------------------------------------------------ *
+ * Dual-thumb range slider
+ *
+ * Two native range inputs are stacked over a shared track. The inputs
+ * themselves ignore pointer events so the visible thumb is the only hit
+ * target, which keeps the control keyboard-accessible for free.
+ * ------------------------------------------------------------------ */
+
+.range-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  height: 1rem;
+  width: 1rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid var(--color-brand-600);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.25);
+  cursor: pointer;
+}
+
+.range-input::-moz-range-thumb {
+  pointer-events: auto;
+  height: 0.9rem;
+  width: 0.9rem;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid var(--color-brand-600);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.25);
+  cursor: pointer;
+}
+
+.range-input::-moz-range-track {
+  background: transparent;
+}
+
+.range-input:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
+
+.range-input:focus-visible::-moz-range-thumb {
+  outline: 2px solid var(--color-brand-600);
+  outline-offset: 2px;
+}
