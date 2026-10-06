@@ -34,7 +34,15 @@ export default function FeesPage() {
   const { records, toast } = useAppStore();
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<FeeSortKey>('total-desc');
-  const [editing, setEditing] = useState<EmployerRecord | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  /* Read the open record back out of the live store so an amount edited in
+     the modal recalculates the totals immediately, rather than against the
+     snapshot taken when the modal was opened. */
+  const editing = useMemo(
+    () => (editingId ? (records.find((record) => record.employer.id === editingId) ?? null) : null),
+    [editingId, records],
+  );
 
   const metrics = useMemo(() => computeDashboardMetrics(records), [records]);
 
@@ -146,7 +154,7 @@ export default function FeesPage() {
         align: 'right',
         width: '3.5rem',
         render: (record) => (
-          <IconButton size="sm" label={`Edit fees for ${record.employer.companyName}`} onClick={() => setEditing(record)}>
+          <IconButton size="sm" label={`Edit fees for ${record.employer.companyName}`} onClick={() => setEditingId(record.employer.id)}>
             <Pencil />
           </IconButton>
         ),
@@ -272,13 +280,13 @@ export default function FeesPage() {
 
       <Modal
         open={Boolean(editing)}
-        onClose={() => setEditing(null)}
+        onClose={() => setEditingId(null)}
         size="lg"
         icon={<Receipt />}
         title={editing ? `Fees — ${editing.employer.companyName}` : 'Fees'}
         description="Amounts are quoted in Philippine pesos. Totals recalculate as you edit."
         footer={
-          <Button variant="primary" onClick={() => setEditing(null)}>
+          <Button variant="primary" onClick={() => setEditingId(null)}>
             Done
           </Button>
         }

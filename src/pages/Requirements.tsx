@@ -37,7 +37,15 @@ export default function RequirementsPage() {
   const { records, toast } = useAppStore();
   const [tab, setTab] = useState<RequirementTab>('all');
   const [query, setQuery] = useState('');
-  const [selected, setSelected] = useState<EmployerRecord | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  /* Read the open record back out of the live store so a status change made
+     inside the modal is reflected immediately, rather than against the
+     snapshot taken when the modal was opened. */
+  const selected = useMemo(
+    () => (selectedId ? (records.find((record) => record.employer.id === selectedId) ?? null) : null),
+    [selectedId, records],
+  );
 
   const buckets = useMemo(() => {
     const map = new Map<RequirementStatus, number>();
@@ -159,7 +167,7 @@ export default function RequirementsPage() {
             <IconButton
               size="sm"
               label={`Open checklist for ${record.employer.companyName}`}
-              onClick={() => setSelected(record)}
+              onClick={() => setSelectedId(record.employer.id)}
             >
               <Eye />
             </IconButton>
@@ -273,7 +281,7 @@ export default function RequirementsPage() {
 
       <Modal
         open={Boolean(selected)}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedId(null)}
         size="lg"
         icon={<ListChecks />}
         title={selected ? `Checklist — ${selected.employer.companyName}` : 'Checklist'}
@@ -288,7 +296,7 @@ export default function RequirementsPage() {
                 Open employer profile
               </Link>
             )}
-            <Button variant="primary" onClick={() => setSelected(null)}>
+            <Button variant="primary" onClick={() => setSelectedId(null)}>
               Done
             </Button>
           </>
