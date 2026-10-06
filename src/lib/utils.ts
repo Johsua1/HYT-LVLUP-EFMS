@@ -211,6 +211,46 @@ export function slugify(value: string): string {
     .replace(/(^-|-$)/g, '');
 }
 
+/* Words that say nothing about *which* document a file is, so they must not
+   count as a match on their own. */
+const DOCUMENT_NAME_NOISE = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'copy',
+  'scan',
+  'scanned',
+  'file',
+  'document',
+  'documents',
+]);
+
+function significantWords(value: string): string[] {
+  return value
+    .toLowerCase()
+    .replace(/\.[a-z0-9]{1,5}$/, '')
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 3 && !DOCUMENT_NAME_NOISE.has(word));
+}
+
+/**
+ * Whether a file looks like the document it is being filed as.
+ *
+ * Compares the file name against the document name and reports a match when
+ * they share any significant word — so "insurance-policy-2026.pdf" matches
+ * "Insurance Documents" while "vacation-photo.jpg" does not. Deliberately
+ * loose: it only backs an advisory warning, and a false negative would nag
+ * about files that are perfectly correct. A name with nothing to compare
+ * (e.g. "N/A") is treated as matching.
+ */
+export function fileNameMatchesDocument(fileName: string, documentName: string): boolean {
+  const words = significantWords(documentName);
+  if (!words.length) return true;
+  const haystack = fileName.toLowerCase();
+  return words.some((word) => haystack.includes(word));
+}
+
 export function unique<T>(values: T[]): T[] {
   return Array.from(new Set(values));
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, FileText, Paperclip, Trash2, Upload, UploadCloud, X } from 'lucide-react';
+import { AlertTriangle, Download, FileText, Paperclip, Trash2, Upload, UploadCloud, X } from 'lucide-react';
 import type { DocumentRecord, DocumentStatus, TableColumn } from '@/types';
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from '@/lib/constants';
-import { cn, dateOnly, formatFileSize } from '@/lib/utils';
+import { cn, dateOnly, fileNameMatchesDocument, formatFileSize } from '@/lib/utils';
 import { useAppStore } from '@/store/AppStore';
 import { useAuth } from '@/auth/AuthProvider';
 import { createDocumentSignedUrl } from '@/lib/supabase';
@@ -240,7 +240,8 @@ interface DocumentDraft {
  * metadata row is written (useful for logging a document that lives offline).
  */
 export function DocumentFormModal({ open, onClose, employerId, document }: DocumentFormModalProps) {
-  const { employers, addDocument, updateDocument, uploadDocument, replaceDocumentFile, toast } = useAppStore();
+  const { employers, records, addDocument, updateDocument, uploadDocument, replaceDocumentFile, toast } =
+    useAppStore();
   const { profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -287,14 +288,36 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
     }
   }, [open, document, employerId, employers]);
 
+  /* A document is uploaded to satisfy one of the employer's checklist items,
+     so those labels are the name suggestions and the chosen one explains
+     what the file should contain. */
+  const requirements = useMemo(
+    () => records.find((record) => record.employer.id === draft.employerId)?.requirements ?? [],
+    [records, draft.employerId],
+  );
+
+  const matchedRequirement = useMemo(() => {
+    const typed = draft.name.trim().toLowerCase();
+    return requirements.find((item) => item.label.toLowerCase() === typed) ?? null;
+  }, [requirements, draft.name]);
+
+  /* Advisory only: a file whose name shares nothing with the document name is
+     probably the wrong attachment, but the user knows best and may continue. */
+  const fileMismatch =
+    Boolean(draft.fileName) &&
+    Boolean(draft.name.trim()) &&
+    !fileNameMatchesDocument(draft.fileName, draft.name);
+
   const handleFile = (selected: File | undefined) => {
     if (!selected) return;
     setFile(selected);
+    /* The name is not derived from the file: it must name one of the
+       employer's requirements, so that the two can be checked against each
+       other instead of always agreeing by construction. */
     setDraft((current) => ({
       ...current,
       fileName: selected.name,
       fileSizeKb: Math.max(1, Math.round(selected.size / 1024)),
-      name: current.name || selected.name.replace(/\.[^.]+$/, ''),
     }));
   };
 
@@ -447,11 +470,22 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
               </>
             )}
           </div>
+
+          {fileMismatch && (
+            <p className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span>
+                “{draft.fileName}” doesn’t mention “{draft.name.trim()}”. Double-check that this is the
+                right file — you can still add it.
+              </span>
+            </p>
+          )}
         </div>
 
         <Input
           label="Document name *"
           name="doc-name"
+          list="document-name-options"
           data-autofocus
           value={draft.name}
           onChange={(event) => {
@@ -459,8 +493,18 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
             setErrors((current) => ({ ...current, name: '' }));
           }}
           error={errors.name}
+          hint={
+            matchedRequirement
+              ? matchedRequirement.description
+              : 'Pick one of this employer’s requirements, or type a name of your own.'
+          }
           placeholder="e.g. Business Registration Certificate"
         />
+        <datalist id="document-name-options">
+          {requirements.map((item) => (
+            <option key={item.id} value={item.label} />
+          ))}
+        </datalist>
 
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <Select
