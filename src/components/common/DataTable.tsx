@@ -31,7 +31,7 @@ export interface DataTableProps<T> {
   sort?: DataTableSort;
   selection?: DataTableSelection;
   onRowClick?: (row: T) => void;
-  /** Switches to a card layout below the `md` breakpoint. */
+  /** Switches to a card layout below the `lg` breakpoint. */
   renderMobileCard?: (row: T) => ReactNode;
   rowClassName?: (row: T) => string;
   /** Extra content rendered directly under the table (pagination, totals…). */

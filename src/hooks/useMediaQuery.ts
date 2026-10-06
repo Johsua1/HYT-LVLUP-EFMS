@@ -23,8 +23,7 @@ export function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-/** Tailwind's `md` breakpoint — the point where tables replace mobile cards. */
-export const useIsDesktop = () => useMediaQuery('(min-width: 768px)');
-
-/** Tailwind's `lg` breakpoint — the point where the sidebar is persistent. */
-export const useIsWide = () => useMediaQuery('(min-width: 1024px)');
+/** Tailwind's `lg` breakpoint — the point where the sidebar is persistent and
+ *  data tables replace their mobile card layout. Kept in step with `AppShell`
+ *  and `Sidebar`, which both switch at `lg` (1024px). */
+export const useIsDesktop = () => useMediaQuery('(min-width: 1024px)');

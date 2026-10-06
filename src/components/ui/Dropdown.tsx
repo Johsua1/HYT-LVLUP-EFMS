@@ -102,7 +102,7 @@ export function Dropdown({ trigger, sections, align = 'end', width = 232, classN
           }}
           style={{ width }}
           className={cn(
-            'animate-slide-up absolute z-40 mt-1.5 overflow-hidden rounded-lg border border-ink-200 bg-white py-1 shadow-raised',
+            'animate-slide-up absolute z-40 mt-1.5 max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-ink-200 bg-white py-1 shadow-raised',
             align === 'end' ? 'right-0' : 'left-0',
           )}
         >

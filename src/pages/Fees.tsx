@@ -162,6 +162,50 @@ export default function FeesPage() {
     ];
   }, []);
 
+  const renderMobileCard = (record: EmployerRecord) => (
+    <div className="border-ink-200 shadow-card rounded-card border bg-white p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            to={`/employers/${record.employer.id}`}
+            className="text-ink-900 hover:text-brand-700 block truncate text-[13px] font-semibold"
+          >
+            {record.employer.companyName}
+          </Link>
+          <p className="text-ink-500 truncate text-[11px]">
+            {record.employer.country} · {record.employer.industry}
+          </p>
+        </div>
+        <IconButton
+          size="sm"
+          label={`Edit fees for ${record.employer.companyName}`}
+          onClick={() => setEditingId(record.employer.id)}
+        >
+          <Pencil />
+        </IconButton>
+      </div>
+
+      <dl className="border-ink-200 mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3">
+        {FEE_TYPES.map((type) => (
+          <div key={type} className="min-w-0">
+            <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">{type}</dt>
+            <dd className="mt-0.5">
+              <CurrencyAmount
+                value={record.feeTotals[type]}
+                className={record.feeTotals[type] > 0 ? 'text-ink-700 text-[12px]' : 'text-ink-300 text-[12px]'}
+              />
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="border-ink-200 mt-3 flex items-center justify-between gap-3 border-t pt-3">
+        <span className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Total to worker</span>
+        <CurrencyAmount value={record.totalEstimatedCost} className="text-ink-900 text-[13px] font-semibold" />
+      </div>
+    </div>
+  );
+
   const handleExport = () => {
     const csv = toCsv(
       rows.map((record) => {
@@ -251,6 +295,7 @@ export default function FeesPage() {
           columns={columns}
           rows={pageRows}
           rowKey={(record) => record.employer.id}
+          renderMobileCard={renderMobileCard}
           empty={
             <EmptyState
               variant="search"

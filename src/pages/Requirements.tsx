@@ -178,6 +178,68 @@ export default function RequirementsPage() {
     [],
   );
 
+  const renderMobileCard = (record: EmployerRecord) => {
+    const done = record.requirements.filter((item) => item.completed).length;
+    const latest = [...record.requirements].sort(
+      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+    )[0];
+
+    return (
+      <div className="border-ink-200 shadow-card rounded-card border bg-white p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <Link
+              to={`/employers/${record.employer.id}`}
+              className="text-ink-900 hover:text-brand-700 block truncate text-[13px] font-semibold"
+            >
+              {record.employer.companyName}
+            </Link>
+            <p className="text-ink-500 truncate text-[11px]">
+              {record.employer.country} · {record.employer.industry}
+            </p>
+          </div>
+          <IconButton
+            size="sm"
+            label={`Open checklist for ${record.employer.companyName}`}
+            onClick={() => setSelectedId(record.employer.id)}
+          >
+            <Eye />
+          </IconButton>
+        </div>
+
+        <div className="mt-3">
+          <ProgressBar
+            value={record.requirementCompletion}
+            tone={completionTone(record.requirementCompletion)}
+            size="sm"
+            label="Completion"
+            showLabel
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <RequirementStatusBadge status={deriveRequirementBucket(record.requirements)} />
+          {record.mandatoryOutstanding > 0 ? (
+            <Badge tone="danger" icon={<AlertTriangle />}>
+              {record.mandatoryOutstanding} mandatory
+            </Badge>
+          ) : (
+            <Badge tone="success" icon={<CheckCircle2 />}>
+              None
+            </Badge>
+          )}
+        </div>
+
+        <div className="border-ink-200 text-ink-600 mt-3 flex items-center justify-between gap-3 border-t pt-3 text-[11px]">
+          <span className="tnum">
+            {done} / {record.requirements.length} complete · {record.requirementCompletion}%
+          </span>
+          {latest && <RelativeTimeText iso={latest.updatedAt} />}
+        </div>
+      </div>
+    );
+  };
+
   const handleExport = () => {
     const csv = toCsv(
       rows.map((record) => {
@@ -258,6 +320,7 @@ export default function RequirementsPage() {
           columns={columns}
           rows={pageRows}
           rowKey={(record) => record.employer.id}
+          renderMobileCard={renderMobileCard}
           empty={
             <EmptyState
               title={tab === 'all' ? 'No employers' : `No employers are “${tab}”`}

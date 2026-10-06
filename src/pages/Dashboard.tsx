@@ -369,7 +369,7 @@ export default function DashboardPage() {
                   </Link>
                   <EmployerStatusBadge status={record.employer.status} />
                   <VerificationBadge status={record.employer.verification} />
-                  <span className="text-ink-500 w-40 text-xs">
+                  <span className="text-ink-500 w-full text-xs sm:w-40">
                     {record.positionsAvailable} positions · {compactNumber(record.requirementCompletion)}% complete
                   </span>
                   {record.mandatoryOutstanding > 0 && (

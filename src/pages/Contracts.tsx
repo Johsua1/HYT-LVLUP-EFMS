@@ -206,6 +206,88 @@ export default function ContractsPage() {
     [setContractStatus],
   );
 
+  const renderMobileCard = (record: EmployerRecord) => {
+    const next = record.contract ? nextContractStatus(record.contract.status) : null;
+    const stepLabel = next ? (CONTRACT_STEP_LABEL[next] ?? `Move to ${next}`) : null;
+
+    return (
+      <div className="border-ink-200 shadow-card rounded-card border bg-white p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-ink-900 tnum truncate text-[13px] font-semibold">{record.contract?.contractNumber}</p>
+            <Link
+              to={`/employers/${record.employer.id}`}
+              className="text-ink-500 hover:text-brand-700 truncate text-[11px]"
+            >
+              {record.employer.companyName}
+            </Link>
+          </div>
+          <ContractStatusBadge status={effectiveContractStatus(record)} />
+        </div>
+
+        <dl className="border-ink-200 mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3">
+          <div className="min-w-0">
+            <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Start</dt>
+            <dd className="text-ink-700 tnum mt-0.5 text-[12px]">{dateOnly(record.contract?.startDate)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">End</dt>
+            <dd className="text-ink-700 tnum mt-0.5 text-[12px]">{dateOnly(record.contract?.endDate)}</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Duration</dt>
+            <dd className="text-ink-700 mt-0.5 text-[12px]">{record.contract?.durationMonths ?? 0} mo</dd>
+          </div>
+          <div className="min-w-0">
+            <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Expires in</dt>
+            <dd className="mt-0.5">
+              <ExpiryCountdown days={record.daysToContractExpiry} />
+            </dd>
+          </div>
+          <div className="col-span-2 min-w-0">
+            <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Salary</dt>
+            <dd className="mt-0.5">
+              <SalaryRange
+                minPhp={record.salaryMinPhp}
+                maxPhp={record.salaryMaxPhp}
+                minLocal={record.contract?.salaryMinLocal ?? 0}
+                maxLocal={record.contract?.salaryMaxLocal ?? 0}
+                currency={record.contract?.currency ?? 'PHP'}
+                className="text-ink-800 text-[12px]"
+                compact
+              />
+            </dd>
+          </div>
+        </dl>
+
+        <div className="border-ink-200 mt-3 flex items-center justify-between gap-3 border-t pt-3">
+          {record.contract ? <RenewalStatusBadge status={record.contract.renewalStatus} /> : <span />}
+          <div className="flex items-center gap-0.5">
+            {next && stepLabel && (
+              <Tooltip content={stepLabel}>
+                <IconButton
+                  size="sm"
+                  label={stepLabel}
+                  onClick={() => void setContractStatus(record.employer.id, next)}
+                  className="hover:bg-brand-50 hover:text-brand-700"
+                >
+                  <ArrowRightCircle />
+                </IconButton>
+              </Tooltip>
+            )}
+            <IconButton
+              size="sm"
+              label={`View contract ${record.contract?.contractNumber}`}
+              onClick={() => setSelected(record)}
+            >
+              <Eye />
+            </IconButton>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const handleExport = () => {
     const csv = toCsv(
       rows.map((record) => ({
@@ -285,6 +367,7 @@ export default function ContractsPage() {
           columns={columns}
           rows={pageRows}
           rowKey={(record) => record.employer.id}
+          renderMobileCard={renderMobileCard}
           empty={
             <EmptyState
               title={tab === 'all' ? 'No contracts on file' : `No contracts are ${tab.toLowerCase()}`}

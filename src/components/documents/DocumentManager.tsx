@@ -192,11 +192,91 @@ export function DocumentTable({
     return base;
   }, [showEmployer, employers, setDocumentStatus, onEdit, onDelete, toast]);
 
+  const renderMobileCard = (document: DocumentRecord) => (
+    <div className="border-ink-200 shadow-card rounded-card border bg-white p-4">
+      <div className="flex items-start gap-2.5">
+        <span className="bg-ink-100 text-ink-500 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
+          <FileText className="h-4 w-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-ink-900 truncate text-[13px] font-semibold">{document.name}</p>
+          <p className="text-ink-500 truncate text-[11px]">{document.fileName}</p>
+        </div>
+        <DocumentStatusBadge status={document.status} />
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        <Badge tone="neutral">{document.type}</Badge>
+        {showEmployer && <Badge tone="info">{employerName(document.employerId)}</Badge>}
+      </div>
+
+      <dl className="border-ink-200 mt-3 grid grid-cols-2 gap-x-4 gap-y-3 border-t pt-3">
+        <div className="min-w-0">
+          <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Uploaded</dt>
+          <dd className="mt-0.5">
+            <DateText iso={document.uploadedAt} className="text-ink-700" />
+            <p className="text-ink-500 text-[10px]">
+              {document.uploadedBy} · {formatFileSize(document.fileSizeKb)}
+            </p>
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="text-ink-500 text-[10px] font-semibold tracking-wide uppercase">Expires</dt>
+          <dd className="mt-0.5">
+            {document.expiresAt ? (
+              <DateText iso={document.expiresAt} className="text-ink-700" />
+            ) : (
+              <span className="text-ink-400 text-xs">No expiry</span>
+            )}
+          </dd>
+        </div>
+      </dl>
+
+      <div className="border-ink-200 mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+        <Select
+          aria-label={`${document.name} status`}
+          className="h-8 w-full text-[12px] sm:w-36"
+          options={DOCUMENT_STATUSES.map((value) => ({ value, label: value }))}
+          value={document.status}
+          onChange={(event) => setDocumentStatus(document.id, event.target.value as DocumentStatus)}
+        />
+        <div className="flex items-center gap-1">
+          <Tooltip content={document.storagePath ? 'Open file' : 'No file attached'}>
+            <IconButton
+              size="sm"
+              label={`Open ${document.name}`}
+              disabled={!document.storagePath}
+              onClick={() => void openDocument(document)}
+            >
+              <Download />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Edit document">
+            <IconButton size="sm" label={`Edit ${document.name}`} onClick={() => onEdit(document)}>
+              <Paperclip />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="Delete document">
+            <IconButton
+              size="sm"
+              label={`Delete ${document.name}`}
+              onClick={() => onDelete(document)}
+              className="hover:bg-rose-50 hover:text-rose-600"
+            >
+              <Trash2 />
+            </IconButton>
+          </Tooltip>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <DataTable
       columns={columns}
       rows={documents}
       rowKey={(document) => document.id}
+      renderMobileCard={renderMobileCard}
       empty={
         <EmptyState
           variant="documents"

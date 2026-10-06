@@ -13,6 +13,11 @@ import {
   YAxis,
 } from 'recharts';
 import { formatCurrency, formatNumber } from '@/lib/utils';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+
+/** Category labels sit in a fixed-width gutter; narrow screens need a smaller
+ *  gutter (with truncated labels) or the plot area collapses. */
+const useWideChart = () => useMediaQuery('(min-width: 640px)');
 
 /**
  * Thin wrappers around Recharts.
@@ -155,6 +160,7 @@ export function CategoryBarChart({
 }: CategoryBarChartProps) {
   const rows = maxCategories ? data.slice(0, maxCategories) : data;
   const horizontal = layout === 'horizontal';
+  const wide = useWideChart();
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -174,7 +180,8 @@ export function CategoryBarChart({
               tick={AXIS_TICK}
               axisLine={false}
               tickLine={false}
-              width={148}
+              width={wide ? 148 : 96}
+              tickFormatter={(value: string) => (wide || value.length <= 16 ? value : `${value.slice(0, 15)}…`)}
             />
           </>
         ) : (
@@ -272,6 +279,7 @@ export interface RangeDatum {
  */
 export function SalaryRangeChart({ data }: { data: RangeDatum[] }) {
   const rows = data.map((entry) => ({ ...entry, band: [entry.min, entry.max] }));
+  const wide = useWideChart();
 
   return (
     <ResponsiveContainer width="100%" height="100%">
@@ -284,7 +292,15 @@ export function SalaryRangeChart({ data }: { data: RangeDatum[] }) {
           tickLine={false}
           tickFormatter={(value: number) => formatCurrency(value, 'PHP', { compact: true })}
         />
-        <YAxis type="category" dataKey="name" tick={AXIS_TICK} axisLine={false} tickLine={false} width={132} />
+        <YAxis
+          type="category"
+          dataKey="name"
+          tick={AXIS_TICK}
+          axisLine={false}
+          tickLine={false}
+          width={wide ? 132 : 88}
+          tickFormatter={(value: string) => (wide || value.length <= 14 ? value : `${value.slice(0, 13)}…`)}
+        />
         <Tooltip
           cursor={{ fill: 'var(--color-ink-100)' }}
           content={

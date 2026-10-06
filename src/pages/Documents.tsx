@@ -111,7 +111,7 @@ export default function DocumentsPage() {
             />
             <Select
               aria-label="Filter by document type"
-              className="w-44"
+              className="w-full sm:w-44"
               placeholder="All types"
               options={DOCUMENT_TYPES.map((value) => ({ value, label: value }))}
               value={typeFilter}
@@ -119,7 +119,7 @@ export default function DocumentsPage() {
             />
             <Select
               aria-label="Filter by document status"
-              className="w-40"
+              className="w-full sm:w-40"
               placeholder="All statuses"
               options={DOCUMENT_STATUSES.map((value) => ({ value, label: value }))}
               value={statusFilter}
@@ -127,7 +127,7 @@ export default function DocumentsPage() {
             />
             <Select
               aria-label="Filter by employer"
-              className="w-52"
+              className="w-full sm:w-52"
               placeholder="All employers"
               options={employers.map((employer) => ({ value: employer.id, label: employer.companyName }))}
               value={employerFilter}

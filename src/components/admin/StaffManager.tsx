@@ -389,7 +389,7 @@ export function StaffManager() {
                     {statusBadge(row.status)}
                   </div>
 
-                  <div className="flex items-center gap-1.5 sm:justify-end">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
                     <Button
                       variant="outline"
                       size="sm"
