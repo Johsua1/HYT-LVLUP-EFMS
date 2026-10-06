@@ -1542,6 +1542,16 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           ? 'Missing Documents'
           : 'Incomplete';
       const updatedAt = isoOffset(0, 0);
+
+      /* Apply the tick locally first so the box and its badge move the moment
+         it is clicked — waiting for the write makes the change look unsaved. */
+      setState((prev) => ({
+        ...prev,
+        requirements: prev.requirements.map((item) =>
+          item.id === requirementId ? { ...item, completed, status, updatedAt } : item,
+        ),
+      }));
+
       const { data, error: err } = await supabase
         .from('requirements')
         .update({ completed, status, updated_at: updatedAt })
@@ -1549,6 +1559,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         .select('*')
         .single<RequirementRow>();
       if (err || !data) {
+        setState((prev) => ({
+          ...prev,
+          requirements: prev.requirements.map((item) => (item.id === requirementId ? target : item)),
+        }));
         fail(err, 'Requirement could not be updated');
         return;
       }
@@ -1570,13 +1584,32 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const setRequirementStatus = useCallback<AppStoreValue['setRequirementStatus']>(
     async (requirementId, status) => {
+      const target = stateRef.current.requirements.find((r) => r.id === requirementId);
+      if (!target) return;
+      const completed = status === 'Complete';
+      if (target.status === status && target.completed === completed) return;
+      const updatedAt = isoOffset(0, 0);
+
+      /* The control is bound to the stored value, so apply the choice locally
+         first — otherwise it would snap back and the badge would lag. */
+      setState((prev) => ({
+        ...prev,
+        requirements: prev.requirements.map((item) =>
+          item.id === requirementId ? { ...item, status, completed, updatedAt } : item,
+        ),
+      }));
+
       const { data, error: err } = await supabase
         .from('requirements')
-        .update({ status, completed: status === 'Complete', updated_at: isoOffset(0, 0) })
+        .update({ status, completed, updated_at: updatedAt })
         .eq('id', requirementId)
         .select('*')
         .single<RequirementRow>();
       if (err || !data) {
+        setState((prev) => ({
+          ...prev,
+          requirements: prev.requirements.map((item) => (item.id === requirementId ? target : item)),
+        }));
         fail(err, 'Requirement could not be updated');
         return;
       }
