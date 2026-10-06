@@ -37,7 +37,10 @@ import type {
 import { COUNTRY_CODE, CURRENCIES, FEE_TYPES, REQUIREMENT_TEMPLATE } from '@/lib/constants';
 import {
   buildEmployerRecords,
+  DERIVED_NOTIFICATION_PREFIX,
+  deriveContractNotifications,
   deriveContractStatus,
+  mergeNotifications,
   pickPrimaryJob,
   renewalTerm,
   returnedStageEvent,
@@ -131,6 +134,29 @@ export const DEFAULT_EMPLOYER_COLUMNS = [
 ];
 
 const COMPARISON_KEY = 'efms.comparison.v1';
+
+/**
+ * Read/dismiss state for *derived* notifications (contract-expiry alerts),
+ * which have no row in the `notifications` table. Kept per user in local
+ * storage — the same place the comparison selection lives — so a dismissed
+ * alert stays dismissed across reloads without writing throwaway rows.
+ */
+const DERIVED_HANDLED_KEY = (userId: string) => `efms.derived-notifications.v1.${userId}`;
+
+interface HandledAlert {
+  read?: boolean;
+  dismissed?: boolean;
+}
+
+function loadHandledAlerts(userId: string): Record<string, HandledAlert> {
+  try {
+    const raw = window.localStorage.getItem(DERIVED_HANDLED_KEY(userId));
+    const parsed = raw ? (JSON.parse(raw) as unknown) : {};
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, HandledAlert>) : {};
+  } catch {
+    return {};
+  }
+}
 
 interface DataState {
   employers: Employer[];
@@ -328,6 +354,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [comparison, setComparison] = useState<string[]>(loadComparison);
+  const [handledAlerts, setHandledAlerts] = useState<Record<string, HandledAlert>>({});
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -336,6 +363,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   stateRef.current = state;
   const profileRef = useRef(profile);
   profileRef.current = profile;
+  const userRef = useRef(user);
+  userRef.current = user;
+
+  /* Mirror of the derived-alert read/dismiss state, so writes can be persisted
+     synchronously without an effect firing a spurious write on first load. */
+  const handledRef = useRef<Record<string, HandledAlert>>({});
 
   /* Guards the once-per-load expiry reconciliation below against re-running. */
   const reconciledRef = useRef(false);
@@ -345,6 +378,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     name: profile?.full_name || profile?.email || 'Unknown user',
     initials: profile?.initials || initialsOf(profile?.full_name || 'Unknown user'),
   };
+
+  /* Update the derived-alert state and mirror it straight to local storage. */
+  const updateHandledAlerts = useCallback(
+    (updater: (prev: Record<string, HandledAlert>) => Record<string, HandledAlert>) => {
+      const next = updater(handledRef.current);
+      handledRef.current = next;
+      setHandledAlerts(next);
+      const userId = userRef.current?.id;
+      if (!userId) return;
+      try {
+        window.localStorage.setItem(DERIVED_HANDLED_KEY(userId), JSON.stringify(next));
+      } catch {
+        /* private mode */
+      }
+    },
+    [],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Toasts                                                            */
@@ -503,6 +553,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [comparison]);
 
+  /* Reload the derived-alert read/dismiss state whenever the user changes. */
+  useEffect(() => {
+    const loaded = user ? loadHandledAlerts(user.id) : {};
+    handledRef.current = loaded;
+    setHandledAlerts(loaded);
+  }, [user]);
+
   /* ---------------------------------------------------------------- */
   /* Derived                                                           */
   /* ---------------------------------------------------------------- */
@@ -531,10 +588,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const unreadCount = useMemo(
-    () => state.notifications.filter((item) => !item.read).length,
-    [state.notifications],
+  /* Contract-expiry alerts are computed from the live dataset, then overlaid
+     with whatever the user has already read or dismissed. */
+  const derivedNotifications = useMemo(
+    () =>
+      deriveContractNotifications(records)
+        .filter((item) => !handledAlerts[item.id]?.dismissed)
+        .map((item) => ({ ...item, read: handledAlerts[item.id]?.read ?? item.read })),
+    [records, handledAlerts],
   );
+
+  /* The feed the UI consumes: stored per-user rows plus the derived alerts. */
+  const notifications = useMemo(
+    () => mergeNotifications(state.notifications, derivedNotifications),
+    [state.notifications, derivedNotifications],
+  );
+
+  const unreadCount = useMemo(() => notifications.filter((item) => !item.read).length, [notifications]);
 
   const shortlistedIds = useMemo(
     () => state.shortlist.map((entry) => entry.employerId),
@@ -1958,6 +2028,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const markNotificationRead = useCallback<AppStoreValue['markNotificationRead']>(
     async (id, read = true) => {
+      /* Derived alerts have no database row — record the state locally. */
+      if (id.startsWith(DERIVED_NOTIFICATION_PREFIX)) {
+        updateHandledAlerts((prev) => ({ ...prev, [id]: { ...prev[id], read } }));
+        return;
+      }
       setState((prev) => ({
         ...prev,
         notifications: prev.notifications.map((item) => (item.id === id ? { ...item, read } : item)),
@@ -1965,11 +2040,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       const { error: err } = await supabase.from('notifications').update({ read }).eq('id', id);
       if (err) fail(err, 'Notification could not be updated');
     },
-    [fail],
+    [fail, updateHandledAlerts],
   );
 
   const markAllNotificationsRead = useCallback<AppStoreValue['markAllNotificationsRead']>(async () => {
     if (!actor.id) return;
+    if (derivedNotifications.length) {
+      updateHandledAlerts((prev) => {
+        const next = { ...prev };
+        derivedNotifications.forEach((item) => {
+          next[item.id] = { ...next[item.id], read: true };
+        });
+        return next;
+      });
+    }
     setState((prev) => ({ ...prev, notifications: prev.notifications.map((item) => ({ ...item, read: true })) }));
     const { error: err } = await supabase
       .from('notifications')
@@ -1981,15 +2065,20 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return;
     }
     toast({ title: 'All notifications marked as read', variant: 'success' });
-  }, [actor.id, fail, toast]);
+  }, [actor.id, derivedNotifications, fail, toast, updateHandledAlerts]);
 
   const dismissNotification = useCallback<AppStoreValue['dismissNotification']>(
     async (id) => {
+      /* Derived alerts are hidden locally rather than deleted from the table. */
+      if (id.startsWith(DERIVED_NOTIFICATION_PREFIX)) {
+        updateHandledAlerts((prev) => ({ ...prev, [id]: { ...prev[id], dismissed: true } }));
+        return;
+      }
       setState((prev) => ({ ...prev, notifications: prev.notifications.filter((item) => item.id !== id) }));
       const { error: err } = await supabase.from('notifications').delete().eq('id', id);
       if (err) fail(err, 'Notification could not be deleted');
     },
-    [fail],
+    [fail, updateHandledAlerts],
   );
 
   /* ---------------------------------------------------------------- */
@@ -2019,6 +2108,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStoreValue>(
     () => ({
       ...state,
+      /* Override the raw per-user rows with the feed the UI should see:
+         stored notifications plus the derived contract-expiry alerts. */
+      notifications,
       loading,
       error,
       refresh: load,
@@ -2076,6 +2168,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       state,
+      notifications,
       loading,
       error,
       load,

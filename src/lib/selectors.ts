@@ -7,12 +7,13 @@ import type {
   FeeType,
   JobOrder,
   Note,
+  NotificationItem,
   RequirementItem,
   RequirementStatus,
   VerificationEvent,
 } from '@/types';
 import { FEE_TYPES, VERIFICATION_STAGES } from './constants';
-import { addMonths, average, daysFromToday, sum } from './utils';
+import { addMonths, average, dateOnly, daysFromToday, isoOffset, sum } from './utils';
 
 export interface DatasetShape {
   employers: Employer[];
@@ -255,6 +256,72 @@ export function findRecord(records: EmployerRecord[], id: string): EmployerRecor
 export function effectiveContractStatus(record: EmployerRecord): ContractStatus | 'None' {
   if (!record.contract) return 'None';
   return deriveContractStatus(record.contract.status, record.contract.endDate);
+}
+
+/* ------------------------------------------------------------------ */
+/* Derived contract-expiry notifications                               */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Prefix that marks a notification as computed rather than stored. The store
+ * uses it to route read/dismiss updates to local storage instead of the
+ * `notifications` table, which has no matching row.
+ */
+export const DERIVED_NOTIFICATION_PREFIX = 'derived-contract-';
+
+/**
+ * Contract-expiry alerts, derived from the live dataset rather than stored.
+ *
+ * `deriveContractStatus` already makes a contract cross into "Expiring Soon"
+ * (≤ 30 days) and "Expired" on its own, so mirroring that here means the
+ * notification feed warns at exactly the same moment — no nightly job and no
+ * seed refresh. Ids are stable per contract *and* per alert kind, so a
+ * dismissed "expiring" warning does not also swallow the later "expired" alert.
+ */
+export function deriveContractNotifications(records: EmployerRecord[]): NotificationItem[] {
+  const items: NotificationItem[] = [];
+
+  records.forEach((record) => {
+    const { contract, employer, daysToContractExpiry: remaining } = record;
+    if (!contract || remaining === null) return;
+
+    const status = deriveContractStatus(contract.status, contract.endDate);
+    if (status !== 'Expiring Soon' && status !== 'Expired') return;
+
+    const expired = status === 'Expired';
+    const days = Math.abs(remaining);
+
+    items.push({
+      id: `${DERIVED_NOTIFICATION_PREFIX}${expired ? 'expired' : 'expiring'}-${contract.id}`,
+      category: 'Contract',
+      title: expired
+        ? `Contract expired ${days} day${days === 1 ? '' : 's'} ago`
+        : `Contract expires in ${remaining} day${remaining === 1 ? '' : 's'}`,
+      message: expired
+        ? `${employer.companyName} — contract ${contract.contractNumber} lapsed on ${dateOnly(contract.endDate)}. Renew it or close it out.`
+        : `${employer.companyName} — ${contract.contractNumber} lapses on ${dateOnly(contract.endDate)}.`,
+      employerId: employer.id,
+      /* An "expiring" alert dates from when the contract entered the 30-day
+         window (0 → now, 30 → 30 days ago); an "expired" alert dates from the
+         end date itself. */
+      createdAt: expired ? contract.endDate : isoOffset(-(30 - remaining), 0),
+      read: false,
+      severity: expired ? 'critical' : 'warning',
+    });
+  });
+
+  return items;
+}
+
+/** Stored (per-user) notifications plus any derived ones not already present, newest first. */
+export function mergeNotifications(
+  stored: NotificationItem[],
+  derived: NotificationItem[],
+): NotificationItem[] {
+  const storedIds = new Set(stored.map((item) => item.id));
+  return [...stored, ...derived.filter((item) => !storedIds.has(item.id))].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 /* ------------------------------------------------------------------ */
