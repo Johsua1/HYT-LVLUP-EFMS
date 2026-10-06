@@ -35,9 +35,9 @@ import type {
   VerificationStatus,
 } from '@/types';
 import { COUNTRY_CODE, CURRENCIES, FEE_TYPES, REQUIREMENT_TEMPLATE } from '@/lib/constants';
-import { buildEmployerRecords } from '@/lib/selectors';
+import { buildEmployerRecords, deriveContractStatus, renewalTerm } from '@/lib/selectors';
 import { MAX_COMPARISON } from '@/types';
-import { isoOffset, uid } from '@/lib/utils';
+import { addMonths, dateOnly, isoOffset, uid } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
 import { useAuth } from '@/auth/AuthProvider';
 import { DOCUMENTS_BUCKET, ALLOWED_DOCUMENT_MIME, MAX_DOCUMENT_BYTES, describeError, supabase } from '@/lib/supabase';
@@ -225,6 +225,7 @@ interface AppStoreValue {
   setVerification: (id: string, status: VerificationStatus, stage: number) => Promise<void>;
   advanceVerification: (id: string) => Promise<void>;
   setContractStatus: (employerId: string, status: ContractStatus) => Promise<void>;
+  renewContract: (employerId: string) => Promise<void>;
   archiveEmployer: (id: string) => Promise<void>;
   restoreEmployer: (id: string) => Promise<void>;
   deleteEmployer: (id: string) => Promise<void>;
@@ -329,6 +330,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   stateRef.current = state;
   const profileRef = useRef(profile);
   profileRef.current = profile;
+
+  /* Guards the once-per-load expiry reconciliation below against re-running. */
+  const reconciledRef = useRef(false);
 
   const actor = {
     id: user?.id ?? null,
@@ -578,6 +582,64 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   /* ---------------------------------------------------------------- */
+  /* Expiry reconciliation                                             */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Automatic inactive-on-expiry.
+   *
+   * Contract status is derived from the end date, so "Expired" is never stored.
+   * This folds that derived fact back onto the employer row: any employer still
+   * marked Active whose contract has lapsed becomes Inactive. It is idempotent
+   * (a flipped row no longer matches) and best-effort — a failure here must
+   * never block the page, so errors are swallowed.
+   */
+  const reconcileExpiredContracts = useCallback(async () => {
+    const { employers, contracts } = stateRef.current;
+    const contractByEmployer = new Map(contracts.map((c) => [c.employerId, c]));
+    const lapsed = employers.filter((employer) => {
+      if (employer.status !== 'Active') return false;
+      const contract = contractByEmployer.get(employer.id);
+      return contract ? deriveContractStatus(contract.status, contract.endDate) === 'Expired' : false;
+    });
+    if (!lapsed.length) return;
+
+    const { data, error: err } = await supabase
+      .from('employers')
+      .update(snakeize({ status: 'Inactive', updatedAt: isoOffset(0, 0), updatedBy: 'System (contract expired)' }))
+      .in('id', lapsed.map((employer) => employer.id))
+      .select('*');
+    if (err || !data) return;
+
+    const byId = new Map((data as EmployerRow[]).map((row) => [row.id, employerFromRow(row)]));
+    setState((prev) => ({
+      ...prev,
+      employers: prev.employers.map((employer) => byId.get(employer.id) ?? employer),
+    }));
+
+    lapsed.forEach((employer) => {
+      void writeActivity({
+        action: 'automatically set employer to Inactive (contract expired)',
+        actionType: 'status-changed',
+        employerId: employer.id,
+        employerName: employer.companyName,
+        detail: 'Contract end date has passed; employer deactivated automatically.',
+      });
+    });
+  }, [writeActivity]);
+
+  /* Run the reconciliation once per successful load, never in a loop. */
+  useEffect(() => {
+    if (loading) {
+      reconciledRef.current = false;
+      return;
+    }
+    if (!user || reconciledRef.current) return;
+    reconciledRef.current = true;
+    void reconcileExpiredContracts();
+  }, [loading, user, reconcileExpiredContracts]);
+
+  /* ---------------------------------------------------------------- */
   /* Settings persistence                                              */
   /* ---------------------------------------------------------------- */
 
@@ -656,8 +718,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       employerId,
       contractNumber: `CT-${year}-${suffix}`,
       jobOrderId: job.id,
-      startDate: isoOffset(0),
-      endDate: isoOffset(draft.contractDurationMonths * 30),
+      startDate: now,
+      endDate: addMonths(now, draft.contractDurationMonths),
       durationMonths: draft.contractDurationMonths,
       salaryMinLocal: draft.salaryMinLocal,
       salaryMaxLocal: draft.salaryMaxLocal,
@@ -898,6 +960,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (jobRes.error) fail(jobRes.error, 'Job order could not be saved');
 
       const existingContract = stateRef.current.contracts.find((item) => item.employerId === id);
+      /* The contract window is start + duration, so the end date is re-derived
+         on every save: editing the duration moves it, and a term left stale by
+         an older edit is repaired at the same time. */
       const contract: Contract = existingContract
         ? {
             ...existingContract,
@@ -906,7 +971,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             salaryMaxLocal: generated.contract.salaryMaxLocal,
             currency: generated.contract.currency,
             workingConditions: generated.contract.workingConditions,
-            endDate: existingContract.status === 'Draft' ? generated.contract.endDate : existingContract.endDate,
+            endDate: addMonths(existingContract.startDate, generated.contract.durationMonths),
           }
         : generated.contract;
       const contractRes = existingContract
@@ -1096,6 +1161,65 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       });
     },
     [fail, writeActivity, employerNameOf, toast],
+  );
+
+  /**
+   * Renews a contract by extending the same record — no new row and no repeat
+   * approval. The term rolls forward for another `durationMonths`, the renewal
+   * marker flips to `Renewed`, and the employer is returned to good standing.
+   */
+  const renewContract = useCallback<AppStoreValue['renewContract']>(
+    async (employerId) => {
+      const existing = stateRef.current.contracts.find((c) => c.employerId === employerId);
+      if (!existing) {
+        fail(null, 'This employer has no contract to renew');
+        return;
+      }
+
+      const now = new Date().toISOString();
+      const { startDate, endDate } = renewalTerm(existing.endDate, existing.durationMonths);
+
+      const { data, error: err } = await supabase
+        .from('contracts')
+        .update(snakeize({
+          startDate,
+          endDate,
+          renewalStatus: 'Renewed',
+          status: 'Active',
+          signedAt: existing.signedAt ?? now,
+          updatedAt: now,
+        }))
+        .eq('id', existing.id)
+        .select('*')
+        .single<ContractRow>();
+      if (err || !data) {
+        fail(err, 'Contract could not be renewed');
+        return;
+      }
+
+      const updated = contractFromRow(data);
+      setState((prev) => ({
+        ...prev,
+        contracts: prev.contracts.map((c) => (c.id === updated.id ? updated : c)),
+      }));
+
+      /* A renewal puts the employer back in good standing. */
+      await setEmployerStatus(employerId, 'Active');
+
+      void writeActivity({
+        action: 'renewed the contract',
+        actionType: 'updated',
+        employerId,
+        employerName: employerNameOf(employerId),
+        detail: `${updated.contractNumber}: renewed to ${dateOnly(endDate)}.`,
+      });
+      toast({
+        title: 'Contract renewed',
+        description: `${updated.contractNumber} now runs to ${dateOnly(endDate)}.`,
+        variant: 'success',
+      });
+    },
+    [fail, setEmployerStatus, writeActivity, employerNameOf, toast],
   );
 
   const archiveEmployer = useCallback<AppStoreValue['archiveEmployer']>(
@@ -1798,6 +1922,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setVerification,
       advanceVerification,
       setContractStatus,
+      renewContract,
       archiveEmployer,
       restoreEmployer,
       deleteEmployer,
@@ -1854,6 +1979,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setVerification,
       advanceVerification,
       setContractStatus,
+      renewContract,
       archiveEmployer,
       restoreEmployer,
       deleteEmployer,

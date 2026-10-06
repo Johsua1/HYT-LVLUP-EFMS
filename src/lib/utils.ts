@@ -103,6 +103,23 @@ export function isoOffset(days: number, hours = 0): string {
   return d.toISOString();
 }
 
+/**
+ * Adds whole calendar months to an ISO date, clamping to the last valid day of
+ * the target month (31 Jan + 1 month → 28/29 Feb, never 3 Mar). Contract terms
+ * must land on the same day-of-month each cycle, which the 30-day approximation
+ * used at creation cannot guarantee — so renewal uses real months.
+ */
+export function addMonths(iso: string, months: number): string {
+  const source = new Date(iso);
+  const day = source.getUTCDate();
+  const target = new Date(source.getTime());
+  target.setUTCDate(1);
+  target.setUTCMonth(target.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return target.toISOString();
+}
+
 export function dateOnly(iso: string | null | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
