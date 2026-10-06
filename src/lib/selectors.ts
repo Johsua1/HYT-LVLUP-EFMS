@@ -12,7 +12,7 @@ import type {
   VerificationEvent,
 } from '@/types';
 import { FEE_TYPES, VERIFICATION_STAGES } from './constants';
-import { average, daysFromToday, sum } from './utils';
+import { addMonths, average, daysFromToday, sum } from './utils';
 
 export interface DatasetShape {
   employers: Employer[];
@@ -63,6 +63,23 @@ export const CONTRACT_STEP_LABEL: Partial<Record<ContractStatus, string>> = {
   Draft: 'Submit for review',
   'Under Review': 'Approve & activate',
 };
+
+/**
+ * The dates for a renewed contract term.
+ *
+ * The new term starts when the old one ends — or today, if the contract already
+ * lapsed — so coverage stays continuous rather than leaving a gap, and runs for
+ * the contract's original `durationMonths`. Pure (with an injectable `now`) so
+ * the date maths can be tested without touching the clock.
+ */
+export function renewalTerm(
+  endDate: string | null,
+  durationMonths: number,
+  now: Date = new Date(),
+): { startDate: string; endDate: string } {
+  const startsAt = endDate && new Date(endDate).getTime() > now.getTime() ? endDate : now.toISOString();
+  return { startDate: startsAt, endDate: addMonths(startsAt, durationMonths) };
+}
 
 /**
  * How many verification stages are fully complete.

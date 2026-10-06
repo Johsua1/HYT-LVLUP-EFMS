@@ -18,6 +18,7 @@ import {
   Phone,
   Plus,
   Receipt,
+  RefreshCcw,
   Scale,
   StickyNote,
   Trash2,
@@ -38,7 +39,7 @@ import { ProgressBar } from '@/components/ui/ProgressBar';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { CompanyLogo } from '@/components/ui/CompanyLogo';
-import { ContractStatusBadge, EmployerStatusBadge, VerificationBadge } from '@/components/common/StatusBadge';
+import { ContractStatusBadge, EmployerStatusBadge, RenewalStatusBadge, VerificationBadge } from '@/components/common/StatusBadge';
 import { CurrencyAmount, ExpiryCountdown, SalaryRange } from '@/components/common/ValueText';
 import { EmployerFormModal } from '@/components/employers/EmployerFormModal';
 import { JobList } from '@/components/employers/JobList';
@@ -70,6 +71,7 @@ export default function EmployerDetailsPage() {
     deleteEmployer,
     removeDocument,
     setContractStatus,
+    renewContract,
     toast,
   } = useAppStore();
   const { confirm, dialog } = useConfirmDialog();
@@ -125,6 +127,16 @@ export default function EmployerDetailsPage() {
       toast({ title: 'Employer deleted', description: employer.companyName, variant: 'info' });
       navigate('/employers');
     }
+  };
+
+  const handleRenew = async () => {
+    const months = record.contract?.durationMonths ?? 0;
+    const confirmed = await confirm({
+      title: 'Renew contract',
+      message: `Renew ${employer.companyName}'s contract for another ${months} months. The current term is extended, the renewal is marked as renewed, and the employer is returned to Active.`,
+      confirmLabel: 'Renew contract',
+    });
+    if (confirmed) void renewContract(employer.id);
   };
 
   const tabs = [
@@ -399,7 +411,14 @@ export default function EmployerDetailsPage() {
             <DetailList
               columns={1}
               items={[
-                { label: 'Renewal status', value: record.contract?.renewalStatus ?? '—' },
+                {
+                  label: 'Renewal status',
+                  value: record.contract ? (
+                    <RenewalStatusBadge status={record.contract.renewalStatus} />
+                  ) : (
+                    '—'
+                  ),
+                },
                 { label: 'Signed on', value: record.contract?.signedAt ? dateOnly(record.contract.signedAt) : 'Not signed' },
                 {
                   label: 'Days remaining',
@@ -425,6 +444,17 @@ export default function EmployerDetailsPage() {
                 </Button>
                 <p className="text-ink-500 mt-2 text-[11px] leading-relaxed">
                   Contract lifecycle: Draft → Under Review → Active. Activating stamps the signed date.
+                </p>
+              </div>
+            )}
+            {record.contract && !contractNext && (
+              <div className="border-ink-200 mt-4 border-t pt-4">
+                <Button variant="primary" block icon={<RefreshCcw />} onClick={() => void handleRenew()}>
+                  Renew contract
+                </Button>
+                <p className="text-ink-500 mt-2 text-[11px] leading-relaxed">
+                  Extends the current term by {record.contract.durationMonths} months and returns the
+                  employer to Active — no re-approval needed.
                 </p>
               </div>
             )}
