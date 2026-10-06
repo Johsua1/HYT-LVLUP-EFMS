@@ -3,13 +3,28 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Employer Filtering Management System (EFMS) - frontend prototype with mock data",
+  "description": "Employer Filtering Management System (EFMS) — React + Vite frontend on a Supabase (Postgres + Auth + MFA + RLS) backend",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "admin:create": "node scripts/create-admin.mjs",
+    "sb:login": "supabase login",
+    "sb:link": "supabase link --project-ref msaczgyoxjywhojcfgpx",
+    "sb:config": "supabase config push",
+    "sb:smtp": "node scripts/configure-smtp.mjs",
+    "sb:db:push": "supabase db push",
+    "sb:functions:deploy": "node scripts/deploy-functions.mjs",
+    "sb:start": "supabase start",
+    "sb:stop": "supabase stop",
+    "test:contract": "esbuild scripts/test-contract-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-contract-flow.mjs && node scripts/.tmp-contract-flow.mjs",
+    "test:contract:live": "esbuild scripts/test-contract-flow-live.ts --bundle --platform=node --format=esm --packages=external --outfile=scripts/.tmp-contract-flow-live.mjs && node scripts/.tmp-contract-flow-live.mjs",
+    "test:verification": "esbuild scripts/test-verification-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-verification-flow.mjs && node scripts/.tmp-verification-flow.mjs",
+    "test:guard": "esbuild scripts/test-inspect-guard.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-inspect-guard.mjs && node scripts/.tmp-inspect-guard.mjs",
+    "test:flows": "npm run test:contract && npm run test:verification && npm run test:guard"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.2",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -22,6 +37,7 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "supabase": "^2.119.0",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.6.3",
     "vite": "^6.0.3"

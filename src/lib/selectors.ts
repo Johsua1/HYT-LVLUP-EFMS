@@ -11,7 +11,7 @@ import type {
   RequirementStatus,
   VerificationEvent,
 } from '@/types';
-import { FEE_TYPES } from './constants';
+import { FEE_TYPES, VERIFICATION_STAGES } from './constants';
 import { average, daysFromToday, sum } from './utils';
 
 export interface DatasetShape {
@@ -44,6 +44,39 @@ export function deriveContractStatus(
   if (remaining < 0) return 'Expired';
   if (remaining <= 30) return 'Expiring Soon';
   return 'Active';
+}
+
+/**
+ * The next manual step in a contract's lifecycle, or `null` when the contract
+ * is already past the approval stage (its status is then driven by the end
+ * date). Only Draft → Under Review → Active are explicit transitions; the
+ * remaining states are derived.
+ */
+export function nextContractStatus(rawStatus: ContractStatus): ContractStatus | null {
+  if (rawStatus === 'Draft') return 'Under Review';
+  if (rawStatus === 'Under Review') return 'Active';
+  return null;
+}
+
+/** Human label for the button that performs `nextContractStatus`. */
+export const CONTRACT_STEP_LABEL: Partial<Record<ContractStatus, string>> = {
+  Draft: 'Submit for review',
+  'Under Review': 'Approve & activate',
+};
+
+/**
+ * How many verification stages are fully complete.
+ *
+ * `verificationStage` is the index of the stage *currently being worked on*
+ * (0 = nothing done yet), so a `Verified` employer — which the store records at
+ * index 4 — has all five stages done. Feeding that back into the timeline is
+ * what lets "Employer Approved" render as complete and the bar reach 100%;
+ * without it the last stage lingers as "in progress" and progress caps at 80%.
+ */
+export function verificationStagesCompleted(
+  employer: Pick<Employer, 'verification' | 'verificationStage'>,
+): number {
+  return employer.verification === 'Verified' ? VERIFICATION_STAGES.length : employer.verificationStage;
 }
 
 /**

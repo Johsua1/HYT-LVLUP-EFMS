@@ -46,6 +46,20 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  /* Keep the latest handlers in refs so the effect below depends ONLY on
+     `open`. Call sites pass an inline `onClose={() => …}`, so listing it as a
+     dependency gave the effect a new identity on every parent render: typing a
+     character re-ran the effect mid-typing and its autofocus stole focus back
+     to the dialog's first control, so only one character ever landed in a
+     field. */
+  const onCloseRef = useRef(onClose);
+  const dismissibleRef = useRef(dismissible);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    dismissibleRef.current = dismissible;
+  });
+
   useEffect(() => {
     if (!open) return;
 
@@ -54,7 +68,7 @@ export function Modal({
     document.body.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && dismissible) onClose();
+      if (event.key === 'Escape' && dismissibleRef.current) onCloseRef.current();
       if (event.key === 'Tab' && panelRef.current) {
         const focusable = panelRef.current.querySelectorAll<HTMLElement>(
           'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
@@ -74,9 +88,16 @@ export function Modal({
 
     document.addEventListener('keydown', onKeyDown);
     const raf = requestAnimationFrame(() => {
-      panelRef.current
-        ?.querySelector<HTMLElement>('[data-autofocus], button, input, select, textarea, a[href]')
-        ?.focus();
+      const panel = panelRef.current;
+      if (!panel) return;
+      /* Prefer an explicit [data-autofocus] target, then the first form field,
+         and only fall back to a button/link. The previous selector returned the
+         first DOM match, which was always the header ✕ button. */
+      const target =
+        panel.querySelector<HTMLElement>('[data-autofocus]') ??
+        panel.querySelector<HTMLElement>('input:not([type="hidden"]), select, textarea') ??
+        panel.querySelector<HTMLElement>('button, a[href]');
+      target?.focus();
     });
 
     return () => {
@@ -85,7 +106,7 @@ export function Modal({
       document.body.style.overflow = overflow;
       previouslyFocused.current?.focus();
     };
-  }, [open, onClose, dismissible]);
+  }, [open]);
 
   if (!open) return null;
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CheckCircle2, CircleDashed, Clock3, Pin, Plus, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import type { EmployerRecord, VerificationEvent } from '@/types';
 import { VERIFICATION_STAGES } from '@/lib/constants';
+import { verificationStagesCompleted } from '@/lib/selectors';
 import { cn, dateTime } from '@/lib/utils';
 import { useAppStore } from '@/store/AppStore';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -42,7 +43,9 @@ export function VerificationTimeline({ record }: { record: EmployerRecord }) {
   const { advanceVerification, setVerification } = useAppStore();
   const { employer, verificationEvents } = record;
 
-  const completedStages = employer.verificationStage;
+  /* A verified employer has every stage complete; otherwise the index is the
+     stage currently in progress (see `verificationStagesCompleted`). */
+  const completedStages = verificationStagesCompleted(employer);
   const percent = Math.round((completedStages / VERIFICATION_STAGES.length) * 100);
 
   return (
@@ -151,7 +154,7 @@ export function NotesPanel({ record }: { record: EmployerRecord }) {
     <Card>
       <CardHeader
         title="Internal notes"
-        description="Visible to placement staff only. Stored in this browser with the rest of the demo data."
+        description="Visible to placement staff only. Saved to the shared employer record."
       />
 
       <form onSubmit={submit} className="flex flex-col gap-2.5">

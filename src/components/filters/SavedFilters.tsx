@@ -95,14 +95,16 @@ export function SavedFilters({ presets, currentFilters, onApply, onSave, onDelet
                   {preset.useCount}
                 </span>
               </Tooltip>
-              <IconButton
-                size="sm"
-                label={`Delete saved filter ${preset.name}`}
-                onClick={() => onDelete(preset)}
-                className="text-ink-400 hover:bg-rose-50 hover:text-rose-600 h-5 w-5"
-              >
-                <Trash2 className="h-3 w-3" />
-              </IconButton>
+              {!preset.system && (
+                <IconButton
+                  size="sm"
+                  label={`Delete saved filter ${preset.name}`}
+                  onClick={() => onDelete(preset)}
+                  className="text-ink-400 hover:bg-rose-50 hover:text-rose-600 h-5 w-5"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </IconButton>
+              )}
             </span>
           ))}
         </div>
@@ -129,7 +131,7 @@ export function SavedFilters({ presets, currentFilters, onApply, onSave, onDelet
         onClose={() => setModalOpen(false)}
         size="sm"
         title="Save filter set"
-        description={`${activeCount} active criteria will be stored in this browser.`}
+        description={`${activeCount} active criteria will be saved to your account.`}
         footer={
           <>
             <Button variant="outline" onClick={() => setModalOpen(false)}>

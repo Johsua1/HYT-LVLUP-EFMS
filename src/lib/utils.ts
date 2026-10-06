@@ -86,21 +86,20 @@ export function sum(values: number[]): number {
 /* ------------------------------------------------------------------ */
 
 /**
- * All mock data is authored relative to a frozen "today" so that the
- * prototype renders identical, reviewable states on any machine.
- * Swap `TODAY` for `new Date()` when wiring a real backend.
+ * Dates are measured against the real clock. Earlier prototype builds pinned a
+ * frozen "today" so mock screenshots were reproducible; the app now talks to a
+ * live backend, where that anchor would make fresh records look stale and push
+ * contract-expiry counts off by however long the build has aged.
  */
-export const TODAY = new Date('2026-09-30T09:00:00Z');
-
 export function daysFromToday(iso: string): number {
   const target = new Date(iso);
-  const diff = target.getTime() - TODAY.getTime();
+  const diff = target.getTime() - Date.now();
   return Math.ceil(diff / 86_400_000);
 }
 
-/** ISO date string offset from the frozen today — used by the mock dataset. */
+/** ISO date string offset from the current instant — used when creating records. */
 export function isoOffset(days: number, hours = 0): string {
-  const d = new Date(TODAY.getTime() + days * 86_400_000 + hours * 3_600_000);
+  const d = new Date(Date.now() + days * 86_400_000 + hours * 3_600_000);
   return d.toISOString();
 }
 
@@ -125,7 +124,7 @@ export function dateTime(iso: string | null | undefined): string {
 }
 
 export function relativeTime(iso: string): string {
-  const diffMs = new Date(iso).getTime() - TODAY.getTime();
+  const diffMs = new Date(iso).getTime() - Date.now();
   const abs = Math.abs(diffMs);
   const future = diffMs > 0;
 

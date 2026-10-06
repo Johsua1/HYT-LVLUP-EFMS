@@ -114,7 +114,7 @@ export default function EmployerFilterPage() {
     setDrawerOpen(false);
     toast({
       title: 'Filters applied',
-      description: `${results.length} employer${results.length === 1 ? '' : 's'} match. The criteria are saved in this browser.`,
+      description: `${results.length} employer${results.length === 1 ? '' : 's'} match. The criteria are saved to your account.`,
       variant: 'success',
     });
   };
@@ -168,7 +168,9 @@ export default function EmployerFilterPage() {
             message: `${record.employer.companyName} will be hidden from the default list and from filtering results.`,
             confirmLabel: 'Archive employer',
             destructive: true,
-          }).then((confirmed) => confirmed && archiveEmployer(record.employer.id));
+          }).then((confirmed) => {
+            if (confirmed) void archiveEmployer(record.employer.id);
+          });
         },
         onRestore: (record) => restoreEmployer(record.employer.id),
         onDelete: (record) => {
@@ -288,10 +290,12 @@ export default function EmployerFilterPage() {
               onDelete={(preset) => {
                 void confirm({
                   title: 'Delete saved filter',
-                  message: `“${preset.name}” will be removed from this browser.`,
+                  message: `“${preset.name}” will be removed from your account.`,
                   confirmLabel: 'Delete filter',
                   destructive: true,
-                }).then((confirmed) => confirmed && deletePreset(preset.id));
+                }).then((confirmed) => {
+                  if (confirmed) void deletePreset(preset.id);
+                });
               }}
             />
 

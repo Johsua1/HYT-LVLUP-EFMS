@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { PanelLeftClose, PanelLeftOpen, ShieldCheck, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/store/AppStore';
+import { useAuth } from '@/auth/AuthProvider';
 import { NAV_SECTIONS } from './navigation';
 import { CountPill } from '@/components/ui/Badge';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -16,7 +17,12 @@ export interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobile }: SidebarProps) {
   const { unreadCount, shortlist } = useAppStore();
+  const { isAdmin } = useAuth();
   const location = useLocation();
+
+  /* The Administration section is only shown to administrators. Route guards
+     and RLS enforce this independently — hiding the links is just polish. */
+  const sections = NAV_SECTIONS.filter((section) => !section.adminOnly || isAdmin);
 
   const badgeValue = (badge?: 'shortlist' | 'notifications') => {
     if (badge === 'shortlist') return shortlist.length;
@@ -73,7 +79,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
 
       {/* Navigation */}
       <nav aria-label="Main navigation" className="min-h-0 flex-1 overflow-y-auto px-2 py-3">
-        {NAV_SECTIONS.map((section) => (
+        {sections.map((section) => (
           <div key={section.id} className="mb-4 last:mb-0">
             {!collapsed && (
               <p className="text-ink-400 px-2 pb-1.5 text-[10px] font-semibold tracking-wider uppercase">
@@ -141,10 +147,10 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
           <div className="bg-ink-50 rounded-lg p-2.5">
             <div className="text-ink-600 flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5" />
-              <span className="text-[11px] font-semibold">Demo environment</span>
+              <span className="text-[11px] font-semibold">Connected workspace</span>
             </div>
             <p className="text-ink-500 mt-1 text-[10px] leading-relaxed">
-              All employers, fees and contracts are fictional sample data stored in your browser.
+              Fictional sample data, stored securely in your team's Supabase database.
             </p>
           </div>
         ) : null}

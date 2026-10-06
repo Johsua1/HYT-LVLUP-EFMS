@@ -60,7 +60,7 @@ export default function DocumentsPage() {
       destructive: true,
     });
     if (!confirmed) return;
-    removeDocument(document.id);
+    await removeDocument(document.id);
     toast({ title: 'Document deleted', description: document.name, variant: 'info' });
   };
 
@@ -215,7 +215,7 @@ export default function DocumentsPage() {
       {documents.length === 0 && (
         <p className="text-ink-500 mt-3 flex items-center gap-1.5 text-[11px]">
           <Trash2 className="h-3.5 w-3.5" />
-          Documents you add are stored in this browser only.
+          Documents you add are uploaded to Supabase Storage.
         </p>
       )}
     </>

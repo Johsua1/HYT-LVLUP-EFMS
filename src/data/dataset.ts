@@ -162,6 +162,7 @@ function buildDocuments(seed: EmployerSeed): DocumentRecord[] {
     type: doc.type,
     fileName: `${doc.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}.pdf`,
     fileSizeKb: doc.fileSizeKb,
+    storagePath: null,
     uploadedAt: isoOffset(doc.uploadedOffsetDays, index),
     uploadedBy: DOC_UPLOADERS[index % DOC_UPLOADERS.length],
     expiresAt: doc.expiresOffsetDays === null ? null : isoOffset(doc.expiresOffsetDays),

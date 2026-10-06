@@ -42,7 +42,7 @@ export function FeeEditor({ record, bare = false, className }: FeeEditorProps) {
 
   const grossTotal = orderedFees.reduce((sum, fee) => sum + fee.amount, 0);
 
-  const commitAmount = (fee: FeeItem) => {
+  const commitAmount = async (fee: FeeItem) => {
     const raw = draft[fee.id];
     if (raw === undefined) return;
     const parsed = Number(raw);
@@ -53,7 +53,7 @@ export function FeeEditor({ record, bare = false, className }: FeeEditorProps) {
       return next;
     });
     if (next !== fee.amount) {
-      updateFee(fee.id, { amount: next });
+      await updateFee(fee.id, { amount: next });
       toast({
         title: 'Fee updated',
         description: `${fee.type} set to ${formatCurrency(next)} for ${record.employer.companyName}.`,

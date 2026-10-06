@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarClock, Download, Eye, FileSignature, RefreshCcw } from 'lucide-react';
+import { ArrowRightCircle, CalendarClock, Download, Eye, FileSignature, RefreshCcw } from 'lucide-react';
 import type { ContractStatus, EmployerRecord, TableColumn } from '@/types';
 import { CONTRACT_STATUSES } from '@/lib/constants';
 import { dateOnly, downloadFile, formatExpiryCountdown, toCsv } from '@/lib/utils';
-import { effectiveContractStatus } from '@/lib/selectors';
+import { CONTRACT_STEP_LABEL, effectiveContractStatus, nextContractStatus } from '@/lib/selectors';
 import { useAppStore } from '@/store/AppStore';
 import { usePagination } from '@/hooks/usePagination';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -16,6 +16,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Pagination } from '@/components/ui/Pagination';
 import { ProgressBar } from '@/components/ui/ProgressBar';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Toolbar, ToolbarGroup } from '@/components/common/Toolbar';
 import { StatCard } from '@/components/common/StatCard';
 import { DataTable } from '@/components/common/DataTable';
@@ -33,7 +34,7 @@ type ContractTab = 'all' | ContractStatus;
  * its own without anyone editing a status field.
  */
 export default function ContractsPage() {
-  const { records, toast } = useAppStore();
+  const { records, toast, setContractStatus } = useAppStore();
   const [tab, setTab] = useState<ContractTab>('all');
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<EmployerRecord | null>(null);
@@ -69,6 +70,14 @@ export default function ContractsPage() {
 
   const pagination = usePagination(rows.length, 15);
   const pageRows = pagination.paginate(rows);
+
+  /* Read the open contract back out of the live store so a status change
+     performed inside the modal is reflected immediately. */
+  const selectedRecord = useMemo(
+    () => (selected ? records.find((record) => record.employer.id === selected.employer.id) ?? null : null),
+    [selected, records],
+  );
+  const selectedNext = selectedRecord?.contract ? nextContractStatus(selectedRecord.contract.status) : null;
 
   const expiring = counts.get('Expiring Soon') ?? 0;
   const expired = counts.get('Expired') ?? 0;
@@ -164,15 +173,37 @@ export default function ContractsPage() {
         header: '',
         locked: true,
         align: 'right',
-        width: '3.5rem',
-        render: (record) => (
-          <IconButton size="sm" label={`View contract ${record.contract?.contractNumber}`} onClick={() => setSelected(record)}>
-            <Eye />
-          </IconButton>
-        ),
+        width: '5.5rem',
+        render: (record) => {
+          const next = record.contract ? nextContractStatus(record.contract.status) : null;
+          const stepLabel = next ? (CONTRACT_STEP_LABEL[next] ?? `Move to ${next}`) : null;
+          return (
+            <div className="flex items-center justify-end gap-0.5">
+              {next && stepLabel && (
+                <Tooltip content={stepLabel}>
+                  <IconButton
+                    size="sm"
+                    label={stepLabel}
+                    onClick={() => void setContractStatus(record.employer.id, next)}
+                    className="hover:bg-brand-50 hover:text-brand-700"
+                  >
+                    <ArrowRightCircle />
+                  </IconButton>
+                </Tooltip>
+              )}
+              <IconButton
+                size="sm"
+                label={`View contract ${record.contract?.contractNumber}`}
+                onClick={() => setSelected(record)}
+              >
+                <Eye />
+              </IconButton>
+            </div>
+          );
+        },
       },
     ],
-    [],
+    [setContractStatus],
   );
 
   const handleExport = () => {
@@ -280,27 +311,36 @@ export default function ContractsPage() {
         onClose={() => setSelected(null)}
         size="lg"
         icon={<FileSignature />}
-        title={selected ? `Contract ${selected.contract?.contractNumber}` : 'Contract'}
-        description={selected?.employer.companyName}
+        title={selectedRecord ? `Contract ${selectedRecord.contract?.contractNumber}` : 'Contract'}
+        description={selectedRecord?.employer.companyName}
         footer={
           <>
-            {selected && (
+            {selectedRecord && (
               <Link
-                to={`/employers/${selected.employer.id}`}
+                to={`/employers/${selectedRecord.employer.id}`}
                 className="border-ink-300 text-ink-700 hover:bg-ink-50 mr-auto inline-flex h-9 items-center gap-2 rounded-lg border px-3.5 text-sm font-medium"
               >
                 Open employer profile
               </Link>
             )}
-            <Button variant="primary" onClick={() => setSelected(null)}>
+            {selectedNext && (
+              <Button
+                variant="primary"
+                icon={<ArrowRightCircle />}
+                onClick={() => void setContractStatus(selectedRecord!.employer.id, selectedNext)}
+              >
+                {CONTRACT_STEP_LABEL[selectedNext] ?? `Move to ${selectedNext}`}
+              </Button>
+            )}
+            <Button variant={selectedNext ? 'outline' : 'primary'} onClick={() => setSelected(null)}>
               Close
             </Button>
           </>
         }
       >
-        {selected && (
+        {selectedRecord && (
           <div className="flex flex-col gap-4">
-            <ContractPanel record={selected} bare />
+            <ContractPanel record={selectedRecord} bare />
 
             <div className="border-ink-200 border-t pt-4">
               <h3 className="text-ink-900 mb-3 text-[13px] font-semibold">Commercial summary</h3>
@@ -311,31 +351,31 @@ export default function ContractsPage() {
                     label: 'Salary range',
                     value: (
                       <SalaryRange
-                        minPhp={selected.salaryMinPhp}
-                        maxPhp={selected.salaryMaxPhp}
-                        minLocal={selected.contract?.salaryMinLocal ?? 0}
-                        maxLocal={selected.contract?.salaryMaxLocal ?? 0}
-                        currency={selected.contract?.currency ?? 'PHP'}
+                        minPhp={selectedRecord.salaryMinPhp}
+                        maxPhp={selectedRecord.salaryMaxPhp}
+                        minLocal={selectedRecord.contract?.salaryMinLocal ?? 0}
+                        maxLocal={selectedRecord.contract?.salaryMaxLocal ?? 0}
+                        currency={selectedRecord.contract?.currency ?? 'PHP'}
                         className="text-ink-800 text-[13px]"
                       />
                     ),
                   },
                   {
                     label: 'Annual salary value',
-                    value: <CurrencyAmount value={selected.salaryMaxPhp * 12} className="text-ink-800 text-[13px]" />,
+                    value: <CurrencyAmount value={selectedRecord.salaryMaxPhp * 12} className="text-ink-800 text-[13px]" />,
                   },
-                  { label: 'Total fees to worker', value: <CurrencyAmount value={selected.totalEstimatedCost} /> },
+                  { label: 'Total fees to worker', value: <CurrencyAmount value={selectedRecord.totalEstimatedCost} /> },
                   {
                     label: 'Working hours',
-                    value: `${selected.primaryJob?.workingHours ?? '—'} · overtime ${selected.primaryJob?.overtime ?? '—'}`,
+                    value: `${selectedRecord.primaryJob?.workingHours ?? '—'} · overtime ${selectedRecord.primaryJob?.overtime ?? '—'}`,
                   },
                   {
                     label: 'Countdown',
-                    value: formatExpiryCountdown(selected.daysToContractExpiry),
+                    value: formatExpiryCountdown(selectedRecord.daysToContractExpiry),
                   },
                   {
                     label: 'Positions available',
-                    value: `${selected.positionsAvailable} across ${selected.openJobOrders} job order(s)`,
+                    value: `${selectedRecord.positionsAvailable} across ${selectedRecord.openJobOrders} job order(s)`,
                   },
                 ]}
               />
@@ -347,9 +387,9 @@ export default function ContractsPage() {
                 Documentation readiness
               </h3>
               <ProgressBar
-                value={selected.requirementCompletion}
+                value={selectedRecord.requirementCompletion}
                 showLabel
-                label={`${selected.requirements.filter((item) => item.completed).length} of ${selected.requirements.length} requirements complete`}
+                label={`${selectedRecord.requirements.filter((item) => item.completed).length} of ${selectedRecord.requirements.length} requirements complete`}
               />
             </div>
           </div>

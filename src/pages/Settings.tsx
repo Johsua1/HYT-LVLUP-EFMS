@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BellRing,
   Check,
@@ -7,18 +8,20 @@ import {
   LayoutGrid,
   Moon,
   Palette,
-  RotateCcw,
+  RefreshCw,
   SlidersHorizontal,
   Sun,
   Table2,
   Trash2,
-  Upload,
+  UserCog,
 } from 'lucide-react';
 import type { AccentKey } from '@/lib/theme';
 import { ACCENT_THEMES } from '@/lib/theme';
 import { COUNTRIES, EMPLOYER_STATUSES, NOTIFICATION_CATEGORIES } from '@/lib/constants';
 import { downloadFile, formatNumber } from '@/lib/utils';
 import { DEFAULT_EMPLOYER_COLUMNS, DEFAULT_SETTINGS, useAppStore } from '@/store/AppStore';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { useAuth } from '@/auth/AuthProvider';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -26,7 +29,6 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { Checkbox, Segmented, Switch } from '@/components/ui/Checkbox';
 import { Select } from '@/components/ui/Select';
-import { Modal } from '@/components/ui/Modal';
 import { cn } from '@/lib/utils';
 
 const LANDING_PAGES = [
@@ -40,9 +42,9 @@ const LANDING_PAGES = [
 /**
  * Settings.
  *
- * Appearance and display preferences are applied to the document root, so they
- * take effect immediately across the whole application and survive a refresh.
- * The demo-data controls exist because everything lives in localStorage.
+ * Appearance and display preferences are stored per user in the `app_settings`
+ * table and applied to the document root, so they take effect immediately and
+ * follow the signed-in user across devices.
  */
 export default function SettingsPage() {
   const {
@@ -63,13 +65,15 @@ export default function SettingsPage() {
     activity,
     toast,
   } = useAppStore();
+  const { isAdmin, profile } = useAuth();
   const { confirm, dialog } = useConfirmDialog();
-  const [resetOpen, setResetOpen] = useState(false);
+  const navigate = useNavigate();
+  const [reloading, setReloading] = useState(false);
 
   const handleExportJson = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
-      note: 'EFMS frontend prototype — demo data only, no real employers.',
+      note: 'EFMS data export — fictional sample data.',
       settings,
       employers,
       jobs,
@@ -83,29 +87,21 @@ export default function SettingsPage() {
       notifications,
       activity,
     };
-    downloadFile('efms-demo-data.json', JSON.stringify(payload, null, 2), 'application/json');
-    toast({ title: 'Data exported', description: 'A JSON snapshot of the demo data was downloaded.', variant: 'success' });
+    downloadFile('efms-data.json', JSON.stringify(payload, null, 2), 'application/json');
+    toast({ title: 'Data exported', description: 'A JSON snapshot was downloaded.', variant: 'success' });
   };
 
-  const handleReset = () => {
+  const handleReload = async () => {
+    setReloading(true);
     resetDemoData();
-    setResetOpen(false);
+    setReloading(false);
   };
-
-  const storageSize = (() => {
-    try {
-      const raw = window.localStorage.getItem('efms.state.v1');
-      return raw ? `${(raw.length / 1024).toFixed(1)} KB` : '0 KB';
-    } catch {
-      return 'unavailable';
-    }
-  })();
 
   return (
     <>
       <PageHeader
         title="Settings"
-        description="Appearance, display density, currency formatting and demo data controls. Everything is stored in this browser."
+        description="Appearance, display density, currency formatting and team access. Preferences are saved to your account."
       />
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -344,7 +340,7 @@ export default function SettingsPage() {
         <Card className="xl:col-span-2">
           <CardHeader
             title="Data"
-            description="This prototype keeps everything in your browser's localStorage — there is no server, database or API."
+            description="All records are stored in your Supabase Postgres database and shared across the team."
             icon={<Database />}
           />
 
@@ -367,8 +363,8 @@ export default function SettingsPage() {
           </div>
 
           <div className="border-ink-200 mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
-            <Badge tone="neutral" size="md">
-              Local storage in use: {storageSize}
+            <Badge tone={isSupabaseConfigured ? 'success' : 'danger'} size="md">
+              {isSupabaseConfigured ? 'Connected to Supabase' : 'Supabase not configured'}
             </Badge>
             <Badge tone="neutral" size="md">
               {records.length} employer records derived
@@ -376,27 +372,19 @@ export default function SettingsPage() {
             <Badge tone="brand" size="md">
               Accent: {settings.accent}
             </Badge>
+            {profile && (
+              <Badge tone="neutral" size="md">
+                Signed in as {profile.full_name || profile.email} ({profile.role})
+              </Badge>
+            )}
           </div>
 
           <div className="border-ink-200 mt-4 flex flex-wrap items-center gap-2 border-t pt-4">
             <Button variant="outline" icon={<Download />} onClick={handleExportJson}>
-              Export demo data (JSON)
+              Export data (JSON)
             </Button>
-            <Button
-              variant="outline"
-              icon={<Upload />}
-              onClick={() =>
-                toast({
-                  title: 'Import is not available',
-                  description: 'This prototype ships with a fixed dataset — use Reset demo data instead.',
-                  variant: 'info',
-                })
-              }
-            >
-              Import data
-            </Button>
-            <Button variant="danger-outline" icon={<RotateCcw />} onClick={() => setResetOpen(true)}>
-              Reset demo data
+            <Button variant="outline" icon={<RefreshCw />} loading={reloading} onClick={() => void handleReload()}>
+              Reload from database
             </Button>
             <Button
               variant="ghost"
@@ -419,41 +407,33 @@ export default function SettingsPage() {
           </div>
 
           <div className="border-amber-200 bg-amber-50 mt-4 rounded-lg border px-3.5 py-3">
-            <p className="text-amber-800 text-[12px] font-semibold">Demo data notice</p>
+            <p className="text-amber-800 text-[12px] font-semibold">Sample data notice</p>
             <p className="text-amber-800 mt-1 text-[11px] leading-relaxed">
-              Every employer, contact, fee and contract in this application is fictional and was authored for
-              demonstration. No real company, person or bank detail is represented, and nothing leaves this browser.
+              Every employer, contact, fee and contract seeded into this application is fictional and was authored for
+              demonstration. No real company, person or bank detail is represented.
             </p>
           </div>
         </Card>
-      </div>
 
-      <Modal
-        open={resetOpen}
-        onClose={() => setResetOpen(false)}
-        size="sm"
-        icon={<RotateCcw className="text-rose-600" />}
-        title="Reset demo data"
-        description="This restores the original dataset and discards every change you have made."
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setResetOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="danger" onClick={handleReset}>
-              Reset everything
-            </Button>
-          </>
-        }
-      >
-        <ul className="text-ink-600 flex flex-col gap-1.5 text-[13px]">
-          <li>• Employer edits, additions and deletions are discarded.</li>
-          <li>• Fee changes, requirement ticks and document uploads are discarded.</li>
-          <li>• The shortlist, comparison selection and saved filters are reset.</li>
-          <li>• Notifications and activity history return to their shipped state.</li>
-          <li>• Appearance and display preferences return to their defaults.</li>
-        </ul>
-      </Modal>
+        {/* Team & access (admin) --------------------------------------- */}
+        {isAdmin && (
+          <Card className="xl:col-span-2">
+            <CardHeader
+              title="Team & access"
+              description="Staff accounts are managed from the Administration area. Only administrators can invite or disable staff."
+              icon={<UserCog />}
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="primary" icon={<UserCog />} onClick={() => navigate('/admin/staff')}>
+                Open Staff Management
+              </Button>
+              <Badge tone="brand" size="md">
+                Signed in as {profile?.full_name || profile?.email} (administrator)
+              </Badge>
+            </div>
+          </Card>
+        )}
+      </div>
 
       {dialog}
     </>

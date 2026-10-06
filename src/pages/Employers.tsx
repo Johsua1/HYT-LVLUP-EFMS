@@ -159,7 +159,7 @@ export default function EmployersPage() {
       message: (
         <>
           <strong>{record.employer.companyName}</strong> and all of its job orders, fees, requirements and documents will
-          be removed from this browser. This cannot be undone — use Archive instead if you only want to hide it.
+          be removed from the database. This cannot be undone — use Archive instead if you only want to hide it.
         </>
       ),
       confirmLabel: 'Delete permanently',

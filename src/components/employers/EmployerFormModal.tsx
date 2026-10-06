@@ -67,6 +67,7 @@ export function EmployerFormModal({ open, onClose, record }: EmployerFormModalPr
   const { createEmployer, saveEmployer, toast, settings } = useAppStore();
   const [draft, setDraft] = useState<EmployerDraft>(() => createEmptyDraft());
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   /* Reset the form whenever the dialog is opened for a different target. */
   useEffect(() => {
@@ -102,7 +103,7 @@ export function EmployerFormModal({ open, onClose, record }: EmployerFormModalPr
     }));
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitted(true);
 
@@ -115,23 +116,29 @@ export function EmployerFormModal({ open, onClose, record }: EmployerFormModalPr
       return;
     }
 
-    if (record) {
-      saveEmployer(record.employer.id, draft);
-      toast({
-        title: 'Employer updated',
-        description: `${draft.companyName} has been saved.`,
-        variant: 'success',
-      });
-    } else {
-      createEmployer(draft);
-      toast({
-        title: 'Employer added',
-        description: `${draft.companyName} was added with a job order, fee schedule and requirement checklist.`,
-        variant: 'success',
-      });
+    setSaving(true);
+    try {
+      if (record) {
+        const ok = await saveEmployer(record.employer.id, draft);
+        if (!ok) return;
+        toast({
+          title: 'Employer updated',
+          description: `${draft.companyName} has been saved.`,
+          variant: 'success',
+        });
+      } else {
+        const created = await createEmployer(draft);
+        if (!created) return;
+        toast({
+          title: 'Employer added',
+          description: `${draft.companyName} was added with a job order, fee schedule and requirement checklist.`,
+          variant: 'success',
+        });
+      }
+      onClose();
+    } finally {
+      setSaving(false);
     }
-
-    onClose();
   };
 
   const currencyOptions = Object.keys(CURRENCIES).map((code) => ({
@@ -162,10 +169,10 @@ export function EmployerFormModal({ open, onClose, record }: EmployerFormModalPr
               </span>
             )}
           </div>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form="employer-form" variant="primary" icon={<Save />}>
+          <Button type="submit" form="employer-form" variant="primary" icon={<Save />} loading={saving}>
             {record ? 'Save changes' : 'Add employer'}
           </Button>
         </>

@@ -133,6 +133,19 @@ export function applyAccentTheme(key: AccentKey, dark = false): void {
   });
 }
 
+/**
+ * Applies both appearance preferences to the document root: the `dark` class
+ * that `index.css` keys its neutral ramp off, the native colour-scheme hint,
+ * and the accent ramp rebuilt for the active canvas.
+ */
+export function applyTheme(theme: 'light' | 'dark', accent: AccentKey): void {
+  const dark = theme === 'dark';
+  const root = document.documentElement;
+  root.classList.toggle('dark', dark);
+  root.style.colorScheme = dark ? 'dark' : 'light';
+  applyAccentTheme(accent, dark);
+}
+
 /* ------------------------------------------------------------------ */
 /* Dark accent derivation                                              */
 /* ------------------------------------------------------------------ */

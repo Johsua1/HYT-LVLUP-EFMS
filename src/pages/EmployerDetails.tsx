@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Archive,
   ArchiveRestore,
+  ArrowRightCircle,
   BriefcaseBusiness,
   Building2,
   CalendarClock,
@@ -24,7 +25,7 @@ import {
 } from 'lucide-react';
 import type { EmployerRecord } from '@/types';
 import { formatCurrency, formatNumber, dateOnly, relativeTime } from '@/lib/utils';
-import { effectiveContractStatus, findRecord } from '@/lib/selectors';
+import { CONTRACT_STEP_LABEL, effectiveContractStatus, findRecord, nextContractStatus } from '@/lib/selectors';
 import { completionTone } from '@/lib/tokens';
 import { useAppStore } from '@/store/AppStore';
 import { useConfirmDialog } from '@/hooks/useConfirmDialog';
@@ -68,6 +69,7 @@ export default function EmployerDetailsPage() {
     restoreEmployer,
     deleteEmployer,
     removeDocument,
+    setContractStatus,
     toast,
   } = useAppStore();
   const { confirm, dialog } = useConfirmDialog();
@@ -99,6 +101,7 @@ export default function EmployerDetailsPage() {
   const { employer, primaryJob } = record;
   const shortlisted = isShortlisted(employer.id);
   const comparing = isComparing(employer.id);
+  const contractNext = record.contract ? nextContractStatus(record.contract.status) : null;
 
   const handleArchive = async () => {
     const confirmed = await confirm({
@@ -113,7 +116,7 @@ export default function EmployerDetailsPage() {
   const handleDelete = async () => {
     const confirmed = await confirm({
       title: 'Delete employer permanently',
-      message: `${employer.companyName} and every record attached to it will be removed from this browser. This cannot be undone.`,
+      message: `${employer.companyName} and every record attached to it will be removed from the database. This cannot be undone.`,
       confirmLabel: 'Delete permanently',
       destructive: true,
     });
@@ -410,6 +413,21 @@ export default function EmployerDetailsPage() {
                 { label: 'Annual salary value', value: formatCurrency(record.salaryMaxPhp * 12, 'PHP') },
               ]}
             />
+            {contractNext && (
+              <div className="border-ink-200 mt-4 border-t pt-4">
+                <Button
+                  variant="primary"
+                  block
+                  icon={<ArrowRightCircle />}
+                  onClick={() => void setContractStatus(employer.id, contractNext)}
+                >
+                  {CONTRACT_STEP_LABEL[contractNext] ?? `Move to ${contractNext}`}
+                </Button>
+                <p className="text-ink-500 mt-2 text-[11px] leading-relaxed">
+                  Contract lifecycle: Draft → Under Review → Active. Activating stamps the signed date.
+                </p>
+              </div>
+            )}
           </Card>
         </div>
       )}

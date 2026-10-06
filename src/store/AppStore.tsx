@@ -12,7 +12,9 @@ import type {
   ActivityActionType,
   ActivityLogEntry,
   AppSettings,
+  Benefits,
   Contract,
+  ContractStatus,
   Density,
   DocumentRecord,
   DocumentStatus,
@@ -32,15 +34,55 @@ import type {
   VerificationEvent,
   VerificationStatus,
 } from '@/types';
-import { DATASET, CURRENT_USER } from '@/data/dataset';
 import { COUNTRY_CODE, CURRENCIES, FEE_TYPES, REQUIREMENT_TEMPLATE } from '@/lib/constants';
 import { buildEmployerRecords } from '@/lib/selectors';
-import { normalizeFilters } from '@/lib/filters';
-import { applyAccentTheme } from '@/lib/theme';
 import { MAX_COMPARISON } from '@/types';
 import { isoOffset, uid } from '@/lib/utils';
-
-const STORAGE_KEY = 'efms.state.v1';
+import { applyTheme } from '@/lib/theme';
+import { useAuth } from '@/auth/AuthProvider';
+import { DOCUMENTS_BUCKET, ALLOWED_DOCUMENT_MIME, MAX_DOCUMENT_BYTES, describeError, supabase } from '@/lib/supabase';
+import {
+  activityFromRow,
+  contractFromRow,
+  contractToRow,
+  documentFromRow,
+  documentToRow,
+  employerFromRow,
+  employerToRow,
+  feeFromRow,
+  feeToRow,
+  jobFromRow,
+  jobToRow,
+  noteFromRow,
+  noteToRow,
+  notificationFromRow,
+  presetFromRow,
+  requirementFromRow,
+  requirementToRow,
+  settingsFromRow,
+  settingsToRow,
+  shortlistFromRow,
+  snakeize,
+  verificationEventFromRow,
+} from '@/lib/mappers';
+import type {
+  ActivityLogRow,
+  AppSettingsRow,
+  ContractRow,
+  DocumentRow,
+  EmployerRow,
+  FeeRow,
+  FilterPresetRow,
+  JobOrderRow,
+  NoteRow,
+  NotificationRow,
+  RequirementRow,
+  ShortlistRow,
+  VerificationEventRow,
+} from '@/lib/database.types';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
 
 /* ------------------------------------------------------------------ */
 /* Defaults                                                            */
@@ -82,11 +124,9 @@ export const DEFAULT_EMPLOYER_COLUMNS = [
   'updated',
 ];
 
-/* ------------------------------------------------------------------ */
-/* Persisted shape                                                     */
-/* ------------------------------------------------------------------ */
+const COMPARISON_KEY = 'efms.comparison.v1';
 
-interface PersistedState {
+interface DataState {
   employers: Employer[];
   jobs: JobOrder[];
   contracts: Contract[];
@@ -102,72 +142,37 @@ interface PersistedState {
   settings: AppSettings;
   employerColumns: string[];
   savedFilters: FilterState | null;
-  /** Employer ids pinned for side-by-side evaluation. */
-  comparison: string[];
-  /**
-   * Bumped whenever the house palette changes. A payload written by an older
-   * build has its accent reset to the current default on load, so a returning
-   * visitor sees the new branding instead of their stale saved accent — while
-   * keeping every record, note and shortlist entry they had.
-   */
-  brandingVersion: number;
 }
 
-/** Increment when the default accent/theme changes. */
-const BRANDING_VERSION = 2;
-
-/** Seeded so the comparison workspace demonstrates itself on first run. */
-const COMPARISON_SEED = ['emp-001', 'emp-003', 'emp-007'];
-
-function initialState(): PersistedState {
+function emptyState(): DataState {
   return {
-    employers: DATASET.employers,
-    jobs: DATASET.jobs,
-    contracts: DATASET.contracts,
-    fees: DATASET.fees,
-    requirements: DATASET.requirements,
-    documents: DATASET.documents,
-    notes: DATASET.notes,
-    verificationEvents: DATASET.verificationEvents,
-    shortlist: DATASET.shortlist,
-    presets: DATASET.presets,
-    notifications: DATASET.notifications,
-    activity: DATASET.activity,
+    employers: [],
+    jobs: [],
+    contracts: [],
+    fees: [],
+    requirements: [],
+    documents: [],
+    notes: [],
+    verificationEvents: [],
+    shortlist: [],
+    presets: [],
+    notifications: [],
+    activity: [],
     settings: DEFAULT_SETTINGS,
     employerColumns: DEFAULT_EMPLOYER_COLUMNS,
     savedFilters: null,
-    comparison: COMPARISON_SEED,
-    brandingVersion: BRANDING_VERSION,
   };
 }
 
-function loadState(): PersistedState {
-  if (typeof window === 'undefined') return initialState();
+function loadComparison(): string[] {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initialState();
-    const parsed = JSON.parse(raw) as Partial<PersistedState>;
-    const base = initialState();
-    /* A payload from before the current branding keeps its data but adopts the
-       new house accent, so the palette change is visible on first reload. */
-    const staleBranding = (parsed.brandingVersion ?? 0) < BRANDING_VERSION;
-    return {
-      ...base,
-      ...parsed,
-      settings: {
-        ...base.settings,
-        ...(parsed.settings ?? {}),
-        ...(staleBranding ? { accent: base.settings.accent } : {}),
-      },
-      brandingVersion: BRANDING_VERSION,
-      employerColumns: parsed.employerColumns?.length ? parsed.employerColumns : base.employerColumns,
-      savedFilters: parsed.savedFilters ? normalizeFilters(parsed.savedFilters) : null,
-      comparison: Array.isArray(parsed.comparison)
-        ? parsed.comparison.filter((id) => typeof id === 'string').slice(0, MAX_COMPARISON)
-        : base.comparison,
-    };
+    const raw = window.localStorage.getItem(COMPARISON_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed)
+      ? parsed.filter((id): id is string => typeof id === 'string').slice(0, MAX_COMPARISON)
+      : [];
   } catch {
-    return initialState();
+    return [];
   }
 }
 
@@ -175,7 +180,20 @@ function loadState(): PersistedState {
 /* Context                                                             */
 /* ------------------------------------------------------------------ */
 
+export interface UploadDocumentMeta {
+  name: string;
+  type: string;
+  status: DocumentStatus;
+  expiresAt: string | null;
+  notes: string;
+}
+
 interface AppStoreValue {
+  /* Status */
+  loading: boolean;
+  error: string | null;
+  refresh: () => Promise<void>;
+
   /* Raw collections */
   employers: Employer[];
   jobs: JobOrder[];
@@ -200,20 +218,21 @@ interface AppStoreValue {
   comparisonRecords: EmployerRecord[];
 
   /* Employers */
-  createEmployer: (draft: EmployerDraft) => Employer;
-  saveEmployer: (id: string, draft: EmployerDraft) => void;
-  updateEmployer: (id: string, patch: Partial<Employer>) => void;
-  setEmployerStatus: (id: string, status: EmployerStatus) => void;
-  setVerification: (id: string, status: VerificationStatus, stage: number) => void;
-  advanceVerification: (id: string) => void;
-  archiveEmployer: (id: string) => void;
-  restoreEmployer: (id: string) => void;
-  deleteEmployer: (id: string) => void;
+  createEmployer: (draft: EmployerDraft) => Promise<Employer | null>;
+  saveEmployer: (id: string, draft: EmployerDraft) => Promise<boolean>;
+  updateEmployer: (id: string, patch: Partial<Employer>) => Promise<void>;
+  setEmployerStatus: (id: string, status: EmployerStatus) => Promise<void>;
+  setVerification: (id: string, status: VerificationStatus, stage: number) => Promise<void>;
+  advanceVerification: (id: string) => Promise<void>;
+  setContractStatus: (employerId: string, status: ContractStatus) => Promise<void>;
+  archiveEmployer: (id: string) => Promise<void>;
+  restoreEmployer: (id: string) => Promise<void>;
+  deleteEmployer: (id: string) => Promise<void>;
 
   /* Shortlist */
-  toggleShortlist: (id: string) => void;
+  toggleShortlist: (id: string) => Promise<void>;
   isShortlisted: (id: string) => boolean;
-  updateShortlistNote: (id: string, note: string) => void;
+  updateShortlistNote: (id: string, note: string) => Promise<void>;
 
   /* Comparison */
   isComparing: (id: string) => boolean;
@@ -222,34 +241,36 @@ interface AppStoreValue {
   clearComparison: () => void;
 
   /* Fees */
-  updateFee: (feeId: string, patch: Partial<FeeItem>) => void;
-  addFee: (employerId: string, fee: Omit<FeeItem, 'id' | 'employerId'>) => void;
-  removeFee: (feeId: string) => void;
+  updateFee: (feeId: string, patch: Partial<FeeItem>) => Promise<void>;
+  addFee: (employerId: string, fee: Omit<FeeItem, 'id' | 'employerId'>) => Promise<void>;
+  removeFee: (feeId: string) => Promise<void>;
 
   /* Requirements */
-  toggleRequirement: (requirementId: string) => void;
-  setRequirementStatus: (requirementId: string, status: RequirementItem['status']) => void;
+  toggleRequirement: (requirementId: string) => Promise<void>;
+  setRequirementStatus: (requirementId: string, status: RequirementItem['status']) => Promise<void>;
 
   /* Documents */
-  addDocument: (employerId: string, doc: Omit<DocumentRecord, 'id' | 'employerId'>) => void;
-  updateDocument: (docId: string, patch: Partial<DocumentRecord>) => void;
-  setDocumentStatus: (docId: string, status: DocumentStatus) => void;
-  removeDocument: (docId: string) => void;
+  addDocument: (employerId: string, doc: Omit<DocumentRecord, 'id' | 'employerId' | 'storagePath'>) => Promise<void>;
+  uploadDocument: (employerId: string, file: File, meta: UploadDocumentMeta) => Promise<{ error: string | null }>;
+  updateDocument: (docId: string, patch: Partial<DocumentRecord>) => Promise<void>;
+  replaceDocumentFile: (docId: string, file: File) => Promise<{ error: string | null }>;
+  setDocumentStatus: (docId: string, status: DocumentStatus) => Promise<void>;
+  removeDocument: (docId: string) => Promise<void>;
 
   /* Notes */
-  addNote: (employerId: string, body: string, pinned?: boolean) => void;
-  deleteNote: (noteId: string) => void;
+  addNote: (employerId: string, body: string, pinned?: boolean) => Promise<void>;
+  deleteNote: (noteId: string) => Promise<void>;
 
   /* Presets */
-  savePreset: (name: string, description: string, filters: FilterState) => void;
-  renamePreset: (id: string, name: string, description: string) => void;
-  deletePreset: (id: string) => void;
-  markPresetUsed: (id: string) => void;
+  savePreset: (name: string, description: string, filters: FilterState) => Promise<void>;
+  renamePreset: (id: string, name: string, description: string) => Promise<void>;
+  deletePreset: (id: string) => Promise<void>;
+  markPresetUsed: (id: string) => Promise<void>;
 
   /* Notifications */
-  markNotificationRead: (id: string, read?: boolean) => void;
-  markAllNotificationsRead: () => void;
-  dismissNotification: (id: string) => void;
+  markNotificationRead: (id: string, read?: boolean) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  dismissNotification: (id: string) => Promise<void>;
 
   /* Filters persistence */
   persistFilters: (filters: FilterState | null) => void;
@@ -279,34 +300,45 @@ interface AppStoreValue {
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
-const USER_INITIALS: Record<string, string> = {
-  'Johsua Rivera': 'JR',
-  'Maria Santos': 'MS',
-  'Angelo Cruz': 'AC',
-  'Ella Mendoza': 'EM',
-};
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? '')
+      .join('') || 'SY'
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Provider                                                            */
+/* ------------------------------------------------------------------ */
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<PersistedState>(loadState);
+  const { user, profile } = useAuth();
+  const [state, setState] = useState<DataState>(emptyState);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [comparison, setComparison] = useState<string[]>(loadComparison);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  /* Persist — cheap enough at this data size to write on every mutation. */
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* Quota exceeded or private mode — the app keeps working in memory. */
-    }
-  }, [state]);
+  /* Latest state, readable from callbacks without stale closures. */
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const profileRef = useRef(profile);
+  profileRef.current = profile;
 
-  /* Theme is applied to the document root, not the React tree: the accent ramp
-     is written as inline custom properties and dark mode toggles a root class. */
-  useEffect(() => {
-    const dark = state.settings.theme === 'dark';
-    document.documentElement.classList.toggle('dark', dark);
-    applyAccentTheme(state.settings.accent, dark);
-  }, [state.settings.accent, state.settings.theme]);
+  const actor = {
+    id: user?.id ?? null,
+    name: profile?.full_name || profile?.email || 'Unknown user',
+    initials: profile?.initials || initialsOf(profile?.full_name || 'Unknown user'),
+  };
+
+  /* ---------------------------------------------------------------- */
+  /* Toasts                                                            */
+  /* ---------------------------------------------------------------- */
 
   const dismissToast = useCallback((id: string) => {
     setToasts((current) => current.filter((item) => item.id !== id));
@@ -331,6 +363,135 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  /* Keep the document root in sync with the user's appearance preferences. */
+  useEffect(() => {
+    applyTheme(state.settings.theme, state.settings.accent);
+  }, [state.settings.theme, state.settings.accent]);
+
+  const fail = useCallback(
+    (err: unknown, title: string) => {
+      const description = describeError(err);
+      toast({ title, description, variant: 'error' });
+      return description;
+    },
+    [toast],
+  );
+
+  /* ---------------------------------------------------------------- */
+  /* Load                                                              */
+  /* ---------------------------------------------------------------- */
+
+  const load = useCallback(async () => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const [
+        employersRes,
+        jobsRes,
+        contractsRes,
+        feesRes,
+        requirementsRes,
+        documentsRes,
+        notesRes,
+        verRes,
+        shortlistRes,
+        presetsRes,
+        notificationsRes,
+        activityRes,
+        settingsRes,
+      ] = await Promise.all([
+        supabase.from('employers').select('*').order('updated_at', { ascending: false }),
+        supabase.from('job_orders').select('*').order('posted_at', { ascending: false }),
+        supabase.from('contracts').select('*'),
+        supabase.from('fees').select('*'),
+        supabase.from('requirements').select('*'),
+        supabase.from('documents').select('*').order('uploaded_at', { ascending: false }),
+        supabase.from('notes').select('*').order('created_at', { ascending: false }),
+        supabase.from('verification_events').select('*').order('occurred_at', { ascending: true }),
+        supabase.from('shortlist').select('*').eq('user_id', user.id).order('added_at', { ascending: false }),
+        supabase
+          .from('filter_presets')
+          .select('*')
+          .or(`user_id.is.null,user_id.eq.${user.id}`)
+          .order('created_at', { ascending: true }),
+        supabase.from('notifications').select('*').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(400),
+        supabase.from('app_settings').select('*').eq('user_id', user.id).maybeSingle<AppSettingsRow>(),
+      ]);
+
+      const firstError =
+        employersRes.error ||
+        jobsRes.error ||
+        contractsRes.error ||
+        feesRes.error ||
+        requirementsRes.error ||
+        documentsRes.error ||
+        notesRes.error ||
+        verRes.error ||
+        shortlistRes.error ||
+        presetsRes.error ||
+        notificationsRes.error ||
+        activityRes.error;
+      if (firstError) throw firstError;
+
+      /* Guarantee a settings row even if the signup trigger has not run. */
+      let settingsRow = settingsRes.data;
+      if (!settingsRow) {
+        const { data: created } = await supabase
+          .from('app_settings')
+          .upsert(settingsToRow(user.id, DEFAULT_SETTINGS, DEFAULT_EMPLOYER_COLUMNS, null), {
+            onConflict: 'user_id',
+          })
+          .select('*')
+          .single<AppSettingsRow>();
+        settingsRow = created ?? null;
+      }
+
+      const bundle = settingsRow ? settingsFromRow(settingsRow) : null;
+
+      setState({
+        employers: (employersRes.data ?? []).map((r) => employerFromRow(r as EmployerRow)),
+        jobs: (jobsRes.data ?? []).map((r) => jobFromRow(r as JobOrderRow)),
+        contracts: (contractsRes.data ?? []).map((r) => contractFromRow(r as ContractRow)),
+        fees: (feesRes.data ?? []).map((r) => feeFromRow(r as FeeRow)),
+        requirements: (requirementsRes.data ?? []).map((r) => requirementFromRow(r as RequirementRow)),
+        documents: (documentsRes.data ?? []).map((r) => documentFromRow(r as DocumentRow)),
+        notes: (notesRes.data ?? []).map((r) => noteFromRow(r as NoteRow)),
+        verificationEvents: (verRes.data ?? []).map((r) => verificationEventFromRow(r as VerificationEventRow)),
+        shortlist: (shortlistRes.data ?? []).map((r) => shortlistFromRow(r as ShortlistRow)),
+        presets: (presetsRes.data ?? []).map((r) => presetFromRow(r as FilterPresetRow)),
+        notifications: (notificationsRes.data ?? []).map((r) => notificationFromRow(r as NotificationRow)),
+        activity: (activityRes.data ?? []).map((r) => activityFromRow(r as ActivityLogRow)),
+        settings: bundle?.settings ?? DEFAULT_SETTINGS,
+        employerColumns: bundle?.employerColumns?.length ? bundle.employerColumns : DEFAULT_EMPLOYER_COLUMNS,
+        savedFilters: bundle?.savedFilters ?? null,
+      });
+    } catch (err) {
+      setError(describeError(err));
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setState(emptyState());
+      setLoading(false);
+      return;
+    }
+    void load();
+  }, [user, load]);
+
+  /* Persist comparison selection locally — it is ephemeral UI state. */
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COMPARISON_KEY, JSON.stringify(comparison));
+    } catch {
+      /* private mode */
+    }
+  }, [comparison]);
 
   /* ---------------------------------------------------------------- */
   /* Derived                                                           */
@@ -372,64 +533,103 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const comparisonRecords = useMemo(
     () =>
-      state.comparison
+      comparison
         .map((id) => records.find((record) => record.employer.id === id))
         .filter((record): record is EmployerRecord => Boolean(record)),
-    [state.comparison, records],
+    [comparison, records],
   );
 
   /* ---------------------------------------------------------------- */
   /* Activity helper                                                   */
   /* ---------------------------------------------------------------- */
 
-  const logActivity = useCallback<AppStoreValue['logActivity']>((entry) => {
-    const user = entry.user ?? CURRENT_USER.name;
-    setState((current) => ({
-      ...current,
-      activity: [
-        {
-          id: uid('act'),
-          user,
-          userInitials: USER_INITIALS[user] ?? 'SY',
-          action: entry.action,
-          actionType: entry.actionType,
-          employerId: entry.employerId ?? null,
-          employerName: entry.employerName ?? '—',
-          timestamp: isoOffset(0, 0),
-          detail: entry.detail,
-        },
-        ...current.activity,
-      ].slice(0, 400),
-    }));
-  }, []);
+  const writeActivity = useCallback(
+    async (entry: {
+      action: string;
+      actionType: ActivityActionType;
+      employerId?: string | null;
+      employerName?: string;
+      detail?: string;
+      user?: string;
+    }) => {
+      const current = profileRef.current;
+      const name = entry.user ?? current?.full_name ?? current?.email ?? 'Unknown user';
+      const payload = {
+        user_id: actor.id,
+        user_name: name,
+        user_initials: current?.initials || initialsOf(name),
+        action: entry.action,
+        action_type: entry.actionType,
+        employer_id: entry.employerId ?? null,
+        employer_name: entry.employerName ?? '—',
+        detail: entry.detail ?? null,
+      };
+      const { data } = await supabase.from('activity_log').insert(payload).select('*').single<ActivityLogRow>();
+      if (data) {
+        setState((prev) => ({ ...prev, activity: [activityFromRow(data), ...prev.activity].slice(0, 400) }));
+      }
+    },
+    [actor.id],
+  );
 
   const employerNameOf = useCallback(
-    (id: string) => state.employers.find((e) => e.id === id)?.companyName ?? '—',
-    [state.employers],
+    (id: string) => stateRef.current.employers.find((e) => e.id === id)?.companyName ?? '—',
+    [],
   );
 
   /* ---------------------------------------------------------------- */
-  /* Employer actions                                                  */
+  /* Settings persistence                                              */
   /* ---------------------------------------------------------------- */
 
-  /**
-   * Expands a registration draft into the employer's dependent collections.
-   *
-   * A staff member registers an employer *and* their first job order, fee
-   * schedule and benefit package in a single pass, so the store — not the form
-   * component — owns the rules that turn one draft into five records. Both
-   * `createEmployer` and `saveEmployer` go through here, which keeps the two
-   * paths from drifting apart.
-   */
+  const persistSettings = useCallback(
+    async (next: AppSettings, columns: string[], filters: FilterState | null) => {
+      if (!actor.id) return;
+      const { error: err } = await supabase
+        .from('app_settings')
+        .upsert(settingsToRow(actor.id, next, columns, filters), { onConflict: 'user_id' });
+      if (err) fail(err, 'Could not save settings');
+    },
+    [actor.id, fail],
+  );
+
+  const updateSettings = useCallback<AppStoreValue['updateSettings']>(
+    (patch) => {
+      const next = { ...stateRef.current.settings, ...patch };
+      setState((prev) => ({ ...prev, settings: next }));
+      void persistSettings(next, stateRef.current.employerColumns, stateRef.current.savedFilters);
+    },
+    [persistSettings],
+  );
+
+  const setEmployerColumns = useCallback<AppStoreValue['setEmployerColumns']>(
+    (columns) => {
+      setState((prev) => ({ ...prev, employerColumns: columns }));
+      void persistSettings(stateRef.current.settings, columns, stateRef.current.savedFilters);
+    },
+    [persistSettings],
+  );
+
+  const persistFilters = useCallback<AppStoreValue['persistFilters']>(
+    (filters) => {
+      setState((prev) => ({ ...prev, savedFilters: filters }));
+      void persistSettings(stateRef.current.settings, stateRef.current.employerColumns, filters);
+    },
+    [persistSettings],
+  );
+
+  /* ---------------------------------------------------------------- */
+  /* Employer draft expansion                                          */
+  /* ---------------------------------------------------------------- */
+
   const expandDraft = useCallback((draft: EmployerDraft, employerId: string) => {
     const now = isoOffset(0, 0);
     const year = new Date(now).getFullYear();
-    const suffix = employerId.slice(-4).toUpperCase();
+    const suffix = employerId.replace(/-/g, '').slice(-4).toUpperCase();
     const rate = CURRENCIES[draft.currency]?.rateToPhp ?? 1;
     const toPhp = (amount: number) => Math.round(amount * rate);
 
     const job: JobOrder = {
-      id: `${employerId}-job-1`,
+      id: crypto.randomUUID(),
       employerId,
       reference: `JO-${year}-${suffix}`,
       position: draft.position,
@@ -452,7 +652,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     };
 
     const contract: Contract = {
-      id: `${employerId}-contract`,
+      id: crypto.randomUUID(),
       employerId,
       contractNumber: `CT-${year}-${suffix}`,
       jobOrderId: job.id,
@@ -470,7 +670,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     };
 
     const fees: FeeItem[] = FEE_TYPES.map((type) => ({
-      id: `${employerId}-fee-${type.toLowerCase().replace(/[^a-z]+/g, '-')}`,
+      id: crypto.randomUUID(),
       employerId,
       type,
       amount: draft.fees[type] ?? 0,
@@ -482,7 +682,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }));
 
     const requirements: RequirementItem[] = REQUIREMENT_TEMPLATE.map((template) => ({
-      id: `${employerId}-req-${template.key}`,
+      id: crypto.randomUUID(),
       employerId,
       key: template.key,
       label: template.label,
@@ -499,6 +699,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const buildEmployerFromDraft = useCallback(
     (id: string, draft: EmployerDraft): Employer => {
       const now = isoOffset(0, 0);
+      const current = profileRef.current;
       return {
         id,
         companyName: draft.companyName,
@@ -529,253 +730,319 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         description: draft.description,
         createdAt: now,
         updatedAt: now,
-        updatedBy: CURRENT_USER.name,
+        updatedBy: current?.full_name ?? 'Unknown user',
       };
     },
     [],
   );
 
+  /* ---------------------------------------------------------------- */
+  /* Employer actions                                                  */
+  /* ---------------------------------------------------------------- */
+
   const createEmployer = useCallback<AppStoreValue['createEmployer']>(
-    (draft) => {
-      const id = uid('emp');
-      const now = isoOffset(0, 0);
+    async (draft) => {
+      const id = crypto.randomUUID();
       const employer = buildEmployerFromDraft(id, draft);
       const { job, contract, fees, requirements } = expandDraft(draft, id);
 
-      setState((current) => ({
-        ...current,
-        employers: [employer, ...current.employers],
-        jobs: [...current.jobs, job],
-        contracts: [...current.contracts, contract],
-        fees: [...current.fees, ...fees],
-        requirements: [...current.requirements, ...requirements],
-        notifications: [
-          {
-            id: uid('ntf'),
-            category: 'Employer',
-            title: 'New employer added',
-            message: `${employer.companyName} (${employer.country}) was added to the employer database.`,
-            employerId: employer.id,
-            createdAt: now,
-            read: false,
-            severity: 'info',
-          },
-          ...current.notifications,
-        ],
-        activity: [
-          {
-            id: uid('act'),
-            user: CURRENT_USER.name,
-            userInitials: CURRENT_USER.initials,
-            action: 'added a new employer',
-            actionType: 'created',
-            employerId: employer.id,
-            employerName: employer.companyName,
-            timestamp: now,
-            detail: `${employer.companyName} (${employer.country}) registered with a ${draft.contractDurationMonths}-month contract.`,
-          },
-          ...current.activity,
-        ],
+      const { data, error: err } = await supabase
+        .from('employers')
+        .insert(employerToRow(employer, actor.id))
+        .select('*')
+        .single<EmployerRow>();
+      if (err || !data) {
+        fail(err, 'Employer could not be added');
+        return null;
+      }
+      const saved = employerFromRow(data);
+
+      /* The contract carries a foreign key to the job order, so the job order
+         must be committed first — these two cannot share one Promise.all.
+         If the job order fails, skip the rest so the database never holds a
+         half-written employer that the UI does not know about. */
+      const jobRes = await supabase.from('job_orders').insert(jobToRow(job));
+      let depError = jobRes.error;
+      if (!depError) {
+        const [contractRes, feesRes, reqRes] = await Promise.all([
+          supabase.from('contracts').insert(contractToRow(contract)),
+          supabase.from('fees').insert(fees.map(feeToRow)),
+          supabase.from('requirements').insert(requirements.map(requirementToRow)),
+        ]);
+        depError = contractRes.error || feesRes.error || reqRes.error;
+      }
+      if (depError) fail(depError, 'Some employer details could not be saved');
+
+      setState((prev) => ({
+        ...prev,
+        employers: [saved, ...prev.employers],
+        jobs: depError ? prev.jobs : [...prev.jobs, job],
+        contracts: depError ? prev.contracts : [...prev.contracts, contract],
+        fees: depError ? prev.fees : [...prev.fees, ...fees],
+        requirements: depError ? prev.requirements : [...prev.requirements, ...requirements],
       }));
 
-      return employer;
+      void writeActivity({
+        action: 'added a new employer',
+        actionType: 'created',
+        employerId: id,
+        employerName: saved.companyName,
+        detail: `${saved.companyName} (${saved.country}) registered with a ${draft.contractDurationMonths}-month contract.`,
+      });
+
+      if (actor.id) {
+        const { data: ntf } = await supabase
+          .from('notifications')
+          .insert({
+            user_id: actor.id,
+            category: 'Employer',
+            title: 'New employer added',
+            message: `${saved.companyName} (${saved.country}) was added to the employer database.`,
+            employer_id: id,
+            severity: 'info',
+            read: false,
+          })
+          .select('*')
+          .single<NotificationRow>();
+        if (ntf) setState((prev) => ({ ...prev, notifications: [notificationFromRow(ntf), ...prev.notifications] }));
+      }
+
+      return saved;
     },
-    [buildEmployerFromDraft, expandDraft],
+    [actor.id, buildEmployerFromDraft, expandDraft, fail, writeActivity],
   );
 
   const saveEmployer = useCallback<AppStoreValue['saveEmployer']>(
-    (id, draft) => {
-      const existingJob = state.jobs.find((job) => job.employerId === id);
-      const generated = expandDraft(draft, id);
+    async (id, draft) => {
       const now = isoOffset(0, 0);
+      const existing = stateRef.current.employers.find((item) => item.id === id);
+      if (!existing) return false;
+      const generated = expandDraft(draft, id);
+      const current = profileRef.current;
+      const updatedBy = current?.full_name ?? 'Unknown user';
 
-      setState((current) => {
-        const employer = current.employers.find((item) => item.id === id);
-        if (!employer) return current;
+      const employerPatch = {
+        companyName: draft.companyName,
+        legalName: draft.legalName || draft.companyName,
+        registrationNumber: draft.registrationNumber || existing.registrationNumber,
+        country: draft.country,
+        countryCode: COUNTRY_CODE[draft.country] ?? existing.countryCode,
+        city: draft.city,
+        address: draft.address,
+        industry: draft.industry,
+        companySize: draft.companySize,
+        website: draft.website,
+        contactPerson: draft.contactPerson,
+        contactRole: draft.contactRole,
+        email: draft.email,
+        phone: draft.phone,
+        status: draft.status,
+        verification: draft.verification,
+        verificationStage: draft.verification === 'Verified' ? 4 : existing.verificationStage,
+        verificationUpdatedAt:
+          draft.verification === existing.verification ? existing.verificationUpdatedAt : now,
+        description: draft.description,
+        updatedAt: now,
+        updatedBy,
+      };
 
-        const updatedEmployer: Employer = {
-          ...employer,
-          companyName: draft.companyName,
-          legalName: draft.legalName || draft.companyName,
-          registrationNumber: draft.registrationNumber || employer.registrationNumber,
-          country: draft.country,
-          countryCode: COUNTRY_CODE[draft.country] ?? employer.countryCode,
-          city: draft.city,
-          address: draft.address,
-          industry: draft.industry,
-          companySize: draft.companySize,
-          website: draft.website,
-          contactPerson: draft.contactPerson,
-          contactRole: draft.contactRole,
-          email: draft.email,
-          phone: draft.phone,
-          status: draft.status,
-          verification: draft.verification,
-          verificationStage:
-            draft.verification === 'Verified' ? 4 : employer.verificationStage,
-          verificationUpdatedAt:
-            draft.verification === employer.verification ? employer.verificationUpdatedAt : now,
-          description: draft.description,
-          updatedAt: now,
-          updatedBy: CURRENT_USER.name,
-        };
+      const { data: empRow, error: empErr } = await supabase
+        .from('employers')
+        .update(snakeize(employerPatch))
+        .eq('id', id)
+        .select('*')
+        .single<EmployerRow>();
+      if (empErr || !empRow) {
+        fail(empErr, 'Employer could not be updated');
+        return false;
+      }
+      const updatedEmployer = employerFromRow(empRow);
 
-        const job: JobOrder = existingJob
-          ? {
-              ...existingJob,
-              position: generated.job.position,
-              jobCategory: generated.job.jobCategory,
-              workersNeeded: generated.job.workersNeeded,
-              salaryMinLocal: generated.job.salaryMinLocal,
-              salaryMaxLocal: generated.job.salaryMaxLocal,
-              currency: generated.job.currency,
-              salaryMinPhp: generated.job.salaryMinPhp,
-              salaryMaxPhp: generated.job.salaryMaxPhp,
-              workingHours: generated.job.workingHours,
-              overtime: generated.job.overtime,
-              contractDurationMonths: generated.job.contractDurationMonths,
-              employmentType: generated.job.employmentType,
-              benefits: generated.job.benefits,
-            }
-          : generated.job;
+      const existingJob = stateRef.current.jobs.find((job) => job.employerId === id);
+      const job: JobOrder = existingJob
+        ? {
+            ...existingJob,
+            position: generated.job.position,
+            jobCategory: generated.job.jobCategory,
+            workersNeeded: generated.job.workersNeeded,
+            salaryMinLocal: generated.job.salaryMinLocal,
+            salaryMaxLocal: generated.job.salaryMaxLocal,
+            currency: generated.job.currency,
+            salaryMinPhp: generated.job.salaryMinPhp,
+            salaryMaxPhp: generated.job.salaryMaxPhp,
+            workingHours: generated.job.workingHours,
+            overtime: generated.job.overtime,
+            contractDurationMonths: generated.job.contractDurationMonths,
+            employmentType: generated.job.employmentType,
+            benefits: generated.job.benefits,
+          }
+        : generated.job;
 
-        const existingContract = current.contracts.find((item) => item.employerId === id);
-        const contract: Contract | null = existingContract
-          ? {
-              ...existingContract,
-              durationMonths: generated.contract.durationMonths,
-              salaryMinLocal: generated.contract.salaryMinLocal,
-              salaryMaxLocal: generated.contract.salaryMaxLocal,
-              currency: generated.contract.currency,
-              workingConditions: generated.contract.workingConditions,
-              endDate:
-                existingContract.status === 'Draft'
-                  ? generated.contract.endDate
-                  : existingContract.endDate,
-            }
-          : generated.contract;
+      const jobRes = existingJob
+        ? await supabase.from('job_orders').update(snakeize({
+            position: job.position,
+            jobCategory: job.jobCategory,
+            workersNeeded: job.workersNeeded,
+            salaryMinLocal: job.salaryMinLocal,
+            salaryMaxLocal: job.salaryMaxLocal,
+            currency: job.currency,
+            salaryMinPhp: job.salaryMinPhp,
+            salaryMaxPhp: job.salaryMaxPhp,
+            workingHours: job.workingHours,
+            overtime: job.overtime,
+            contractDurationMonths: job.contractDurationMonths,
+            employmentType: job.employmentType,
+            benefits: job.benefits,
+          })).eq('id', existingJob.id)
+        : await supabase.from('job_orders').insert(jobToRow(job));
+      if (jobRes.error) fail(jobRes.error, 'Job order could not be saved');
 
-        return {
-          ...current,
-          employers: current.employers.map((item) => (item.id === id ? updatedEmployer : item)),
-          jobs: existingJob
-            ? current.jobs.map((item) => (item.id === existingJob.id ? job : item))
-            : [...current.jobs, job],
-          contracts: existingContract
-            ? current.contracts.map((item) => (item.id === existingContract.id ? (contract as Contract) : item))
-            : [...current.contracts, generated.contract],
-          fees: [
-            ...current.fees.filter((fee) => fee.employerId !== id),
-            ...generated.fees,
-          ],
-          activity: [
-            {
-              id: uid('act'),
-              user: CURRENT_USER.name,
-              userInitials: CURRENT_USER.initials,
-              action: 'updated employer information',
-              actionType: 'updated',
-              employerId: id,
-              employerName: updatedEmployer.companyName,
-              timestamp: now,
-              detail: 'Company profile, job order, fee schedule and benefits updated.',
-            },
-            ...current.activity,
-          ],
-        };
+      const existingContract = stateRef.current.contracts.find((item) => item.employerId === id);
+      const contract: Contract = existingContract
+        ? {
+            ...existingContract,
+            durationMonths: generated.contract.durationMonths,
+            salaryMinLocal: generated.contract.salaryMinLocal,
+            salaryMaxLocal: generated.contract.salaryMaxLocal,
+            currency: generated.contract.currency,
+            workingConditions: generated.contract.workingConditions,
+            endDate: existingContract.status === 'Draft' ? generated.contract.endDate : existingContract.endDate,
+          }
+        : generated.contract;
+      const contractRes = existingContract
+        ? await supabase.from('contracts').update(snakeize({
+            durationMonths: contract.durationMonths,
+            salaryMinLocal: contract.salaryMinLocal,
+            salaryMaxLocal: contract.salaryMaxLocal,
+            currency: contract.currency,
+            workingConditions: contract.workingConditions,
+            endDate: contract.endDate,
+          })).eq('id', existingContract.id)
+        : await supabase.from('contracts').insert(contractToRow(contract));
+      if (contractRes.error) fail(contractRes.error, 'Contract could not be saved');
+
+      const { error: delFeeErr } = await supabase.from('fees').delete().eq('employer_id', id);
+      const feeRes = delFeeErr
+        ? { error: delFeeErr }
+        : await supabase.from('fees').insert(generated.fees.map(feeToRow));
+      if (feeRes.error) fail(feeRes.error, 'Fee schedule could not be saved');
+
+      setState((prev) => ({
+        ...prev,
+        employers: prev.employers.map((item) => (item.id === id ? updatedEmployer : item)),
+        jobs: existingJob
+          ? prev.jobs.map((item) => (item.id === existingJob.id ? job : item))
+          : [...prev.jobs, job],
+        contracts: existingContract
+          ? prev.contracts.map((item) => (item.id === existingContract.id ? contract : item))
+          : [...prev.contracts, contract],
+        fees: [...prev.fees.filter((fee) => fee.employerId !== id), ...generated.fees],
+      }));
+
+      void writeActivity({
+        action: 'updated employer information',
+        actionType: 'updated',
+        employerId: id,
+        employerName: updatedEmployer.companyName,
+        detail: 'Company profile, job order, fee schedule and benefits updated.',
       });
+      return true;
     },
-    [expandDraft, state.jobs],
+    [expandDraft, fail, writeActivity],
   );
 
-  const updateEmployer = useCallback<AppStoreValue['updateEmployer']>((id, patch) => {
-    setState((current) => ({
-      ...current,
-      employers: current.employers.map((employer) =>
-        employer.id === id
-          ? { ...employer, ...patch, updatedAt: isoOffset(0, 0), updatedBy: CURRENT_USER.name }
-          : employer,
-      ),
-      activity: [
-        {
-          id: uid('act'),
-          user: CURRENT_USER.name,
-          userInitials: CURRENT_USER.initials,
-          action: 'updated employer information',
-          actionType: 'updated',
-          employerId: id,
-          employerName: current.employers.find((e) => e.id === id)?.companyName ?? '—',
-          timestamp: isoOffset(0, 0),
-          detail: `Updated fields: ${Object.keys(patch).join(', ')}.`,
-        },
-        ...current.activity,
-      ],
-    }));
-  }, []);
+  const updateEmployer = useCallback<AppStoreValue['updateEmployer']>(
+    async (id, patch) => {
+      const now = isoOffset(0, 0);
+      const payload = { ...patch, updatedAt: now, updatedBy: profileRef.current?.full_name ?? 'Unknown user' };
+      const { data, error: err } = await supabase
+        .from('employers')
+        .update(snakeize(payload as Record<string, unknown>))
+        .eq('id', id)
+        .select('*')
+        .single<EmployerRow>();
+      if (err || !data) {
+        fail(err, 'Employer could not be updated');
+        return;
+      }
+      const updated = employerFromRow(data);
+      setState((prev) => ({ ...prev, employers: prev.employers.map((e) => (e.id === id ? updated : e)) }));
+      void writeActivity({
+        action: 'updated employer information',
+        actionType: 'updated',
+        employerId: id,
+        employerName: updated.companyName,
+        detail: `Updated fields: ${Object.keys(patch).join(', ')}.`,
+      });
+    },
+    [fail, writeActivity],
+  );
 
-  const setEmployerStatus = useCallback<AppStoreValue['setEmployerStatus']>((id, status) => {
-    setState((current) => ({
-      ...current,
-      employers: current.employers.map((employer) =>
-        employer.id === id
-          ? { ...employer, status, updatedAt: isoOffset(0, 0), updatedBy: CURRENT_USER.name }
-          : employer,
-      ),
-      activity: [
-        {
-          id: uid('act'),
-          user: CURRENT_USER.name,
-          userInitials: CURRENT_USER.initials,
-          action: `changed employer status to ${status}`,
-          actionType: 'status-changed',
-          employerId: id,
-          employerName: current.employers.find((e) => e.id === id)?.companyName ?? '—',
-          timestamp: isoOffset(0, 0),
-        },
-        ...current.activity,
-      ],
-    }));
-  }, []);
+  const setEmployerStatus = useCallback<AppStoreValue['setEmployerStatus']>(
+    async (id, status) => {
+      const { data, error: err } = await supabase
+        .from('employers')
+        .update(snakeize({ status, updatedAt: isoOffset(0, 0), updatedBy: profileRef.current?.full_name ?? '' }))
+        .eq('id', id)
+        .select('*')
+        .single<EmployerRow>();
+      if (err || !data) {
+        fail(err, 'Status could not be changed');
+        return;
+      }
+      const updated = employerFromRow(data);
+      setState((prev) => ({ ...prev, employers: prev.employers.map((e) => (e.id === id ? updated : e)) }));
+      void writeActivity({
+        action: `changed employer status to ${status}`,
+        actionType: 'status-changed',
+        employerId: id,
+        employerName: updated.companyName,
+      });
+    },
+    [fail, writeActivity],
+  );
 
-  const setVerification = useCallback<AppStoreValue['setVerification']>((id, status, stage) => {
-    setState((current) => ({
-      ...current,
-      employers: current.employers.map((employer) =>
-        employer.id === id
-          ? {
-              ...employer,
-              verification: status,
-              verificationStage: stage,
-              verificationUpdatedAt: isoOffset(0, 0),
-              updatedAt: isoOffset(0, 0),
-              updatedBy: CURRENT_USER.name,
-            }
-          : employer,
-      ),
-      activity: [
-        {
-          id: uid('act'),
-          user: CURRENT_USER.name,
-          userInitials: CURRENT_USER.initials,
-          action: `set verification outcome to ${status}`,
-          actionType: status === 'Verified' ? 'verified' : status === 'Rejected' ? 'rejected' : 'status-changed',
-          employerId: id,
-          employerName: current.employers.find((e) => e.id === id)?.companyName ?? '—',
-          timestamp: isoOffset(0, 0),
-          detail: `Verification workflow moved to stage ${stage + 1}.`,
-        },
-        ...current.activity,
-      ],
-    }));
-  }, []);
+  const setVerification = useCallback<AppStoreValue['setVerification']>(
+    async (id, status, stage) => {
+      const now = isoOffset(0, 0);
+      const { data, error: err } = await supabase
+        .from('employers')
+        .update(
+          snakeize({
+            verification: status,
+            verificationStage: stage,
+            verificationUpdatedAt: now,
+            updatedAt: now,
+            updatedBy: profileRef.current?.full_name ?? '',
+          }),
+        )
+        .eq('id', id)
+        .select('*')
+        .single<EmployerRow>();
+      if (err || !data) {
+        fail(err, 'Verification could not be updated');
+        return;
+      }
+      const updated = employerFromRow(data);
+      setState((prev) => ({ ...prev, employers: prev.employers.map((e) => (e.id === id ? updated : e)) }));
+      void writeActivity({
+        action: `set verification outcome to ${status}`,
+        actionType: status === 'Verified' ? 'verified' : status === 'Rejected' ? 'rejected' : 'status-changed',
+        employerId: id,
+        employerName: updated.companyName,
+        detail: `Verification workflow moved to stage ${stage + 1}.`,
+      });
+    },
+    [fail, writeActivity],
+  );
 
   const advanceVerification = useCallback<AppStoreValue['advanceVerification']>(
-    (id) => {
-      const employer = state.employers.find((e) => e.id === id);
+    async (id) => {
+      const employer = stateRef.current.employers.find((e) => e.id === id);
       if (!employer) return;
       const nextStage = Math.min(employer.verificationStage + 1, 4);
       const verified = nextStage === 4;
-      setVerification(id, verified ? 'Verified' : 'Under Review', nextStage);
+      await setVerification(id, verified ? 'Verified' : 'Under Review', nextStage);
       toast({
         title: verified ? 'Employer verified' : `Advanced to stage ${nextStage + 1}`,
         description: verified
@@ -784,115 +1051,191 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         variant: 'success',
       });
     },
-    [state.employers, setVerification, toast],
+    [setVerification, toast],
+  );
+
+  const setContractStatus = useCallback<AppStoreValue['setContractStatus']>(
+    async (employerId, status) => {
+      const existing = stateRef.current.contracts.find((c) => c.employerId === employerId);
+      if (!existing) {
+        fail(null, 'This employer has no contract to update');
+        return;
+      }
+
+      /* Activating a contract is the moment it is signed — stamp the date once. */
+      const signedAt = status === 'Active' ? (existing.signedAt ?? new Date().toISOString()) : existing.signedAt;
+
+      const { data, error: err } = await supabase
+        .from('contracts')
+        .update({ status, signed_at: signedAt })
+        .eq('id', existing.id)
+        .select('*')
+        .single<ContractRow>();
+      if (err || !data) {
+        fail(err, 'Contract status could not be updated');
+        return;
+      }
+
+      const updated = contractFromRow(data);
+      setState((prev) => ({
+        ...prev,
+        contracts: prev.contracts.map((c) => (c.id === updated.id ? updated : c)),
+      }));
+
+      void writeActivity({
+        action: status === 'Active' ? 'activated the contract' : `moved the contract to ${status}`,
+        actionType: status === 'Active' ? 'verified' : 'status-changed',
+        employerId,
+        employerName: employerNameOf(employerId),
+        detail: `${updated.contractNumber}: ${existing.status} → ${status}.`,
+      });
+      toast({
+        title: status === 'Active' ? 'Contract activated' : `Contract moved to ${status}`,
+        description: `${updated.contractNumber} is now ${status}.`,
+        variant: 'success',
+      });
+    },
+    [fail, writeActivity, employerNameOf, toast],
   );
 
   const archiveEmployer = useCallback<AppStoreValue['archiveEmployer']>(
-    (id) => {
-      setEmployerStatus(id, 'Archived');
-      toast({
-        title: 'Employer archived',
-        description: `${employerNameOf(id)} has been archived and hidden from active views.`,
-        variant: 'info',
-      });
+    async (id) => {
+      const name = employerNameOf(id);
+      await setEmployerStatus(id, 'Archived');
+      toast({ title: 'Employer archived', description: `${name} has been archived and hidden from active views.`, variant: 'info' });
     },
     [setEmployerStatus, toast, employerNameOf],
   );
 
   const restoreEmployer = useCallback<AppStoreValue['restoreEmployer']>(
-    (id) => {
-      setEmployerStatus(id, 'Active');
-      toast({ title: 'Employer restored', description: `${employerNameOf(id)} is active again.`, variant: 'success' });
+    async (id) => {
+      const name = employerNameOf(id);
+      await setEmployerStatus(id, 'Active');
+      toast({ title: 'Employer restored', description: `${name} is active again.`, variant: 'success' });
     },
     [setEmployerStatus, toast, employerNameOf],
   );
 
-  const deleteEmployer = useCallback<AppStoreValue['deleteEmployer']>((id) => {
-    setState((current) => ({
-      ...current,
-      employers: current.employers.filter((e) => e.id !== id),
-      jobs: current.jobs.filter((j) => j.employerId !== id),
-      contracts: current.contracts.filter((c) => c.employerId !== id),
-      fees: current.fees.filter((f) => f.employerId !== id),
-      requirements: current.requirements.filter((r) => r.employerId !== id),
-      documents: current.documents.filter((d) => d.employerId !== id),
-      notes: current.notes.filter((n) => n.employerId !== id),
-      verificationEvents: current.verificationEvents.filter((v) => v.employerId !== id),
-      shortlist: current.shortlist.filter((s) => s.employerId !== id),
-      comparison: current.comparison.filter((entry) => entry !== id),
-    }));
-  }, []);
+  const deleteEmployer = useCallback<AppStoreValue['deleteEmployer']>(
+    async (id) => {
+      /* Remove any uploaded files first — the DB cascade cannot reach Storage. */
+      const paths = stateRef.current.documents
+        .filter((doc) => doc.employerId === id && doc.storagePath)
+        .map((doc) => doc.storagePath as string);
+      if (paths.length) await supabase.storage.from(DOCUMENTS_BUCKET).remove(paths);
+
+      const { error: err } = await supabase.from('employers').delete().eq('id', id);
+      if (err) {
+        fail(err, 'Employer could not be deleted');
+        return;
+      }
+      setState((prev) => ({
+        ...prev,
+        employers: prev.employers.filter((e) => e.id !== id),
+        jobs: prev.jobs.filter((j) => j.employerId !== id),
+        contracts: prev.contracts.filter((c) => c.employerId !== id),
+        fees: prev.fees.filter((f) => f.employerId !== id),
+        requirements: prev.requirements.filter((r) => r.employerId !== id),
+        documents: prev.documents.filter((d) => d.employerId !== id),
+        notes: prev.notes.filter((n) => n.employerId !== id),
+        verificationEvents: prev.verificationEvents.filter((v) => v.employerId !== id),
+        shortlist: prev.shortlist.filter((s) => s.employerId !== id),
+      }));
+      setComparison((prev) => prev.filter((entry) => entry !== id));
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Shortlist                                                         */
   /* ---------------------------------------------------------------- */
 
   const isShortlisted = useCallback(
-    (id: string) => state.shortlist.some((entry) => entry.employerId === id),
-    [state.shortlist],
+    (id: string) => stateRef.current.shortlist.some((entry) => entry.employerId === id),
+    [],
   );
 
   const toggleShortlist = useCallback<AppStoreValue['toggleShortlist']>(
-    (id) => {
-      const exists = state.shortlist.some((entry) => entry.employerId === id);
+    async (id) => {
+      if (!actor.id) return;
+      const exists = stateRef.current.shortlist.some((entry) => entry.employerId === id);
       const name = employerNameOf(id);
 
-      setState((current) => ({
-        ...current,
-        shortlist: exists
-          ? current.shortlist.filter((entry) => entry.employerId !== id)
-          : [
-              { employerId: id, note: '', addedAt: isoOffset(0, 0), addedBy: CURRENT_USER.name },
-              ...current.shortlist,
-            ],
-        activity: [
-          {
-            id: uid('act'),
-            user: CURRENT_USER.name,
-            userInitials: CURRENT_USER.initials,
-            action: exists ? 'removed employer from shortlist' : 'added employer to shortlist',
-            actionType: exists ? 'removed' : 'shortlisted',
-            employerId: id,
-            employerName: name,
-            timestamp: isoOffset(0, 0),
-          },
-          ...current.activity,
-        ],
-      }));
+      if (exists) {
+        const { error: err } = await supabase
+          .from('shortlist')
+          .delete()
+          .eq('user_id', actor.id)
+          .eq('employer_id', id);
+        if (err) {
+          fail(err, 'Could not update shortlist');
+          return;
+        }
+        setState((prev) => ({ ...prev, shortlist: prev.shortlist.filter((e) => e.employerId !== id) }));
+      } else {
+        const entry: ShortlistEntry = {
+          employerId: id,
+          note: '',
+          addedAt: isoOffset(0, 0),
+          addedBy: actor.name,
+        };
+        const { error: err } = await supabase.from('shortlist').insert({
+          user_id: actor.id,
+          employer_id: id,
+          note: '',
+          added_by: actor.name,
+          added_at: entry.addedAt,
+        });
+        if (err) {
+          fail(err, 'Could not update shortlist');
+          return;
+        }
+        setState((prev) => ({ ...prev, shortlist: [entry, ...prev.shortlist] }));
+      }
 
+      void writeActivity({
+        action: exists ? 'removed employer from shortlist' : 'added employer to shortlist',
+        actionType: exists ? 'removed' : 'shortlisted',
+        employerId: id,
+        employerName: name,
+      });
       toast({
         title: exists ? 'Removed from shortlist' : 'Added to shortlist',
         description: name,
         variant: exists ? 'info' : 'success',
       });
     },
-    [state.shortlist, toast, employerNameOf],
+    [actor.id, actor.name, fail, employerNameOf, toast, writeActivity],
   );
 
-  const updateShortlistNote = useCallback<AppStoreValue['updateShortlistNote']>((id, note) => {
-    setState((current) => ({
-      ...current,
-      shortlist: current.shortlist.map((entry) =>
-        entry.employerId === id ? { ...entry, note } : entry,
-      ),
-    }));
-  }, []);
-
-  /* ---------------------------------------------------------------- */
-  /* Comparison                                                        */
-  /* ---------------------------------------------------------------- */
-
-  const isComparing = useCallback(
-    (id: string) => state.comparison.includes(id),
-    [state.comparison],
+  const updateShortlistNote = useCallback<AppStoreValue['updateShortlistNote']>(
+    async (id, note) => {
+      if (!actor.id) return;
+      setState((prev) => ({
+        ...prev,
+        shortlist: prev.shortlist.map((entry) => (entry.employerId === id ? { ...entry, note } : entry)),
+      }));
+      const { error: err } = await supabase
+        .from('shortlist')
+        .update({ note })
+        .eq('user_id', actor.id)
+        .eq('employer_id', id);
+      if (err) fail(err, 'Note could not be saved');
+    },
+    [actor.id, fail],
   );
+
+  /* ---------------------------------------------------------------- */
+  /* Comparison (ephemeral, local)                                     */
+  /* ---------------------------------------------------------------- */
+
+  const isComparing = useCallback((id: string) => comparison.includes(id), [comparison]);
 
   const toggleComparison = useCallback<AppStoreValue['toggleComparison']>(
     (id) => {
-      const exists = state.comparison.includes(id);
+      const exists = comparison.includes(id);
       const name = employerNameOf(id);
-
-      if (!exists && state.comparison.length >= MAX_COMPARISON) {
+      if (!exists && comparison.length >= MAX_COMPARISON) {
         toast({
           title: `Comparison is full (${MAX_COMPARISON})`,
           description: 'Remove an employer before adding another.',
@@ -900,29 +1243,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         });
         return;
       }
-
-      setState((current) => ({
-        ...current,
-        comparison: exists
-          ? current.comparison.filter((entry) => entry !== id)
-          : [...current.comparison, id],
-      }));
-
+      setComparison((prev) => (exists ? prev.filter((entry) => entry !== id) : [...prev, id]));
       toast({
         title: exists ? 'Removed from comparison' : 'Added to comparison',
         description: name,
         variant: exists ? 'info' : 'success',
       });
     },
-    [state.comparison, toast, employerNameOf],
+    [comparison, employerNameOf, toast],
   );
 
-  const removeFromComparison = useCallback<AppStoreValue['removeFromComparison']>((id) => {
-    setState((current) => ({ ...current, comparison: current.comparison.filter((entry) => entry !== id) }));
+  const removeFromComparison = useCallback((id: string) => {
+    setComparison((prev) => prev.filter((entry) => entry !== id));
   }, []);
 
   const clearComparison = useCallback(() => {
-    setState((current) => ({ ...current, comparison: [] }));
+    setComparison([]);
     toast({ title: 'Comparison cleared', variant: 'info' });
   }, [toast]);
 
@@ -931,321 +1267,514 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   /* ---------------------------------------------------------------- */
 
   const updateFee = useCallback<AppStoreValue['updateFee']>(
-    (feeId, patch) => {
-      const fee = state.fees.find((f) => f.id === feeId);
-      setState((current) => ({
-        ...current,
-        fees: current.fees.map((item) => (item.id === feeId ? { ...item, ...patch } : item)),
-        activity: fee
-          ? [
-              {
-                id: uid('act'),
-                user: CURRENT_USER.name,
-                userInitials: CURRENT_USER.initials,
-                action: 'updated fee information',
-                actionType: 'updated',
-                employerId: fee.employerId,
-                employerName: current.employers.find((e) => e.id === fee.employerId)?.companyName ?? '—',
-                timestamp: isoOffset(0, 0),
-                detail: `${fee.type} updated.`,
-              },
-              ...current.activity,
-            ]
-          : current.activity,
-      }));
+    async (feeId, patch) => {
+      const fee = stateRef.current.fees.find((f) => f.id === feeId);
+      const { data, error: err } = await supabase
+        .from('fees')
+        .update(snakeize(patch as Record<string, unknown>))
+        .eq('id', feeId)
+        .select('*')
+        .single<FeeRow>();
+      if (err || !data) {
+        fail(err, 'Fee could not be updated');
+        return;
+      }
+      const updated = feeFromRow(data);
+      setState((prev) => ({ ...prev, fees: prev.fees.map((item) => (item.id === feeId ? updated : item)) }));
+      if (fee) {
+        void writeActivity({
+          action: 'updated fee information',
+          actionType: 'updated',
+          employerId: fee.employerId,
+          employerName: employerNameOf(fee.employerId),
+          detail: `${fee.type} updated.`,
+        });
+      }
     },
-    [state.fees],
+    [fail, employerNameOf, writeActivity],
   );
 
-  const addFee = useCallback<AppStoreValue['addFee']>((employerId, fee) => {
-    setState((current) => ({
-      ...current,
-      fees: [...current.fees, { ...fee, id: uid('fee'), employerId }],
-    }));
-  }, []);
+  const addFee = useCallback<AppStoreValue['addFee']>(
+    async (employerId, fee) => {
+      const record: FeeItem = { ...fee, id: crypto.randomUUID(), employerId };
+      const { data, error: err } = await supabase
+        .from('fees')
+        .insert(feeToRow(record))
+        .select('*')
+        .single<FeeRow>();
+      if (err || !data) {
+        fail(err, 'Fee could not be added');
+        return;
+      }
+      const saved = feeFromRow(data);
+      setState((prev) => ({ ...prev, fees: [...prev.fees, saved] }));
+    },
+    [fail],
+  );
 
-  const removeFee = useCallback<AppStoreValue['removeFee']>((feeId) => {
-    setState((current) => ({ ...current, fees: current.fees.filter((f) => f.id !== feeId) }));
-  }, []);
+  const removeFee = useCallback<AppStoreValue['removeFee']>(
+    async (feeId) => {
+      const { error: err } = await supabase.from('fees').delete().eq('id', feeId);
+      if (err) {
+        fail(err, 'Fee could not be removed');
+        return;
+      }
+      setState((prev) => ({ ...prev, fees: prev.fees.filter((f) => f.id !== feeId) }));
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Requirements                                                      */
   /* ---------------------------------------------------------------- */
 
-  const toggleRequirement = useCallback<AppStoreValue['toggleRequirement']>((requirementId) => {
-    setState((current) => {
-      const target = current.requirements.find((r) => r.id === requirementId);
-      if (!target) return current;
+  const toggleRequirement = useCallback<AppStoreValue['toggleRequirement']>(
+    async (requirementId) => {
+      const target = stateRef.current.requirements.find((r) => r.id === requirementId);
+      if (!target) return;
       const completed = !target.completed;
       const status: RequirementItem['status'] = completed
         ? 'Complete'
         : target.mandatory
           ? 'Missing Documents'
           : 'Incomplete';
+      const updatedAt = isoOffset(0, 0);
+      const { data, error: err } = await supabase
+        .from('requirements')
+        .update({ completed, status, updated_at: updatedAt })
+        .eq('id', requirementId)
+        .select('*')
+        .single<RequirementRow>();
+      if (err || !data) {
+        fail(err, 'Requirement could not be updated');
+        return;
+      }
+      const updated = requirementFromRow(data);
+      setState((prev) => ({
+        ...prev,
+        requirements: prev.requirements.map((item) => (item.id === requirementId ? updated : item)),
+      }));
+      void writeActivity({
+        action: completed ? 'completed a requirement' : 'reopened a requirement',
+        actionType: 'updated',
+        employerId: target.employerId,
+        employerName: employerNameOf(target.employerId),
+        detail: `"${target.label}" marked as ${status}.`,
+      });
+    },
+    [fail, employerNameOf, writeActivity],
+  );
 
-      return {
-        ...current,
-        requirements: current.requirements.map((item) =>
-          item.id === requirementId ? { ...item, completed, status, updatedAt: isoOffset(0, 0) } : item,
-        ),
-        activity: [
-          {
-            id: uid('act'),
-            user: CURRENT_USER.name,
-            userInitials: CURRENT_USER.initials,
-            action: completed ? 'completed a requirement' : 'reopened a requirement',
-            actionType: 'updated',
-            employerId: target.employerId,
-            employerName: current.employers.find((e) => e.id === target.employerId)?.companyName ?? '—',
-            timestamp: isoOffset(0, 0),
-            detail: `"${target.label}" marked as ${status}.`,
-          },
-          ...current.activity,
-        ],
-      };
-    });
-  }, []);
-
-  const setRequirementStatus = useCallback<AppStoreValue['setRequirementStatus']>((requirementId, status) => {
-    setState((current) => ({
-      ...current,
-      requirements: current.requirements.map((item) =>
-        item.id === requirementId
-          ? { ...item, status, completed: status === 'Complete', updatedAt: isoOffset(0, 0) }
-          : item,
-      ),
-    }));
-  }, []);
+  const setRequirementStatus = useCallback<AppStoreValue['setRequirementStatus']>(
+    async (requirementId, status) => {
+      const { data, error: err } = await supabase
+        .from('requirements')
+        .update({ status, completed: status === 'Complete', updated_at: isoOffset(0, 0) })
+        .eq('id', requirementId)
+        .select('*')
+        .single<RequirementRow>();
+      if (err || !data) {
+        fail(err, 'Requirement could not be updated');
+        return;
+      }
+      const updated = requirementFromRow(data);
+      setState((prev) => ({
+        ...prev,
+        requirements: prev.requirements.map((item) => (item.id === requirementId ? updated : item)),
+      }));
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Documents                                                         */
   /* ---------------------------------------------------------------- */
 
-  const addDocument = useCallback<AppStoreValue['addDocument']>((employerId, doc) => {
-    setState((current) => ({
-      ...current,
-      documents: [{ ...doc, id: uid('doc'), employerId }, ...current.documents],
-      activity: [
-        {
-          id: uid('act'),
-          user: CURRENT_USER.name,
-          userInitials: CURRENT_USER.initials,
-          action: 'uploaded a document',
-          actionType: 'uploaded',
-          employerId,
-          employerName: current.employers.find((e) => e.id === employerId)?.companyName ?? '—',
-          timestamp: isoOffset(0, 0),
-          detail: `${doc.name} (${doc.type}).`,
-        },
-        ...current.activity,
-      ],
-    }));
-  }, []);
-
-  const updateDocument = useCallback<AppStoreValue['updateDocument']>((docId, patch) => {
-    setState((current) => ({
-      ...current,
-      documents: current.documents.map((item) => (item.id === docId ? { ...item, ...patch } : item)),
-      activity: [
-        {
-          id: uid('act'),
-          user: CURRENT_USER.name,
-          userInitials: CURRENT_USER.initials,
-          action: 'updated a document record',
-          actionType: 'updated',
-          employerId: current.documents.find((d) => d.id === docId)?.employerId ?? null,
-          employerName:
-            current.employers.find(
-              (e) => e.id === current.documents.find((d) => d.id === docId)?.employerId,
-            )?.companyName ?? '—',
-          timestamp: isoOffset(0, 0),
-          detail: `Updated fields: ${Object.keys(patch).join(', ')}.`,
-        },
-        ...current.activity,
-      ],
-    }));
-  }, []);
-
-  const setDocumentStatus = useCallback<AppStoreValue['setDocumentStatus']>(
-    (docId, status) => {
-      const doc = state.documents.find((d) => d.id === docId);
-      setState((current) => ({
-        ...current,
-        documents: current.documents.map((item) => (item.id === docId ? { ...item, status } : item)),
-        activity: doc
-          ? [
-              {
-                id: uid('act'),
-                user: CURRENT_USER.name,
-                userInitials: CURRENT_USER.initials,
-                action: `marked a document as ${status.toLowerCase()}`,
-                actionType: status === 'Verified' ? 'verified' : status === 'Rejected' ? 'rejected' : 'status-changed',
-                employerId: doc.employerId,
-                employerName: current.employers.find((e) => e.id === doc.employerId)?.companyName ?? '—',
-                timestamp: isoOffset(0, 0),
-                detail: doc.name,
-              },
-              ...current.activity,
-            ]
-          : current.activity,
-      }));
+  const validateFile = useCallback(
+    (file: File): string | null => {
+      if (file.size > MAX_DOCUMENT_BYTES) return 'That file is larger than the 10 MB limit.';
+      if (file.type && !(ALLOWED_DOCUMENT_MIME as readonly string[]).includes(file.type)) {
+        return 'That file type is not allowed. Use PDF, Word, Excel or an image.';
+      }
+      return null;
     },
-    [state.documents],
+    [],
   );
 
-  const removeDocument = useCallback<AppStoreValue['removeDocument']>((docId) => {
-    setState((current) => ({ ...current, documents: current.documents.filter((d) => d.id !== docId) }));
-  }, []);
+  const uploadToStorage = useCallback(
+    async (employerId: string, file: File): Promise<{ path: string | null; error: string | null }> => {
+      const invalid = validateFile(file);
+      if (invalid) return { path: null, error: invalid };
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+      const path = `employers/${employerId}/${crypto.randomUUID()}-${safeName}`;
+      const { error: err } = await supabase.storage.from(DOCUMENTS_BUCKET).upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || undefined,
+      });
+      if (err) return { path: null, error: describeError(err) };
+      return { path, error: null };
+    },
+    [validateFile],
+  );
+
+  const addDocument = useCallback<AppStoreValue['addDocument']>(
+    async (employerId, doc) => {
+      const record: DocumentRecord = { ...doc, id: crypto.randomUUID(), employerId, storagePath: null };
+      const { data, error: err } = await supabase
+        .from('documents')
+        .insert(documentToRow(record))
+        .select('*')
+        .single<DocumentRow>();
+      if (err || !data) {
+        fail(err, 'Document could not be saved');
+        return;
+      }
+      const saved = documentFromRow(data);
+      setState((prev) => ({ ...prev, documents: [saved, ...prev.documents] }));
+      void writeActivity({
+        action: 'uploaded a document',
+        actionType: 'uploaded',
+        employerId,
+        employerName: employerNameOf(employerId),
+        detail: `${doc.name} (${doc.type}).`,
+      });
+    },
+    [fail, employerNameOf, writeActivity],
+  );
+
+  const uploadDocument = useCallback<AppStoreValue['uploadDocument']>(
+    async (employerId, file, meta) => {
+      const { path, error: upErr } = await uploadToStorage(employerId, file);
+      if (upErr || !path) return { error: upErr };
+
+      const record: DocumentRecord = {
+        id: crypto.randomUUID(),
+        employerId,
+        name: meta.name,
+        type: meta.type,
+        fileName: file.name,
+        fileSizeKb: Math.max(1, Math.round(file.size / 1024)),
+        storagePath: path,
+        uploadedAt: isoOffset(0, 0),
+        uploadedBy: actor.name,
+        expiresAt: meta.expiresAt,
+        status: meta.status,
+        notes: meta.notes,
+      };
+      const { data, error: err } = await supabase
+        .from('documents')
+        .insert(documentToRow(record))
+        .select('*')
+        .single<DocumentRow>();
+      if (err || !data) {
+        await supabase.storage.from(DOCUMENTS_BUCKET).remove([path]);
+        return { error: describeError(err) };
+      }
+      const saved = documentFromRow(data);
+      setState((prev) => ({ ...prev, documents: [saved, ...prev.documents] }));
+      void writeActivity({
+        action: 'uploaded a document',
+        actionType: 'uploaded',
+        employerId,
+        employerName: employerNameOf(employerId),
+        detail: `${meta.name} (${meta.type}).`,
+      });
+      return { error: null };
+    },
+    [actor.name, uploadToStorage, fail, employerNameOf, writeActivity],
+  );
+
+  const updateDocument = useCallback<AppStoreValue['updateDocument']>(
+    async (docId, patch) => {
+      const { data, error: err } = await supabase
+        .from('documents')
+        .update(snakeize(patch as Record<string, unknown>))
+        .eq('id', docId)
+        .select('*')
+        .single<DocumentRow>();
+      if (err || !data) {
+        fail(err, 'Document could not be updated');
+        return;
+      }
+      const updated = documentFromRow(data);
+      setState((prev) => ({ ...prev, documents: prev.documents.map((item) => (item.id === docId ? updated : item)) }));
+      void writeActivity({
+        action: 'updated a document record',
+        actionType: 'updated',
+        employerId: updated.employerId,
+        employerName: employerNameOf(updated.employerId),
+        detail: `Updated fields: ${Object.keys(patch).join(', ')}.`,
+      });
+    },
+    [fail, employerNameOf, writeActivity],
+  );
+
+  const replaceDocumentFile = useCallback<AppStoreValue['replaceDocumentFile']>(
+    async (docId, file) => {
+      const existing = stateRef.current.documents.find((d) => d.id === docId);
+      if (!existing) return { error: 'Document not found.' };
+      const { path, error: upErr } = await uploadToStorage(existing.employerId, file);
+      if (upErr || !path) return { error: upErr };
+
+      if (existing.storagePath) {
+        await supabase.storage.from(DOCUMENTS_BUCKET).remove([existing.storagePath]);
+      }
+      const { data, error: err } = await supabase
+        .from('documents')
+        .update({ storage_path: path, file_name: file.name, file_size_kb: Math.max(1, Math.round(file.size / 1024)) })
+        .eq('id', docId)
+        .select('*')
+        .single<DocumentRow>();
+      if (err || !data) return { error: describeError(err) };
+      const updated = documentFromRow(data);
+      setState((prev) => ({ ...prev, documents: prev.documents.map((item) => (item.id === docId ? updated : item)) }));
+      return { error: null };
+    },
+    [uploadToStorage],
+  );
+
+  const setDocumentStatus = useCallback<AppStoreValue['setDocumentStatus']>(
+    async (docId, status) => {
+      const doc = stateRef.current.documents.find((d) => d.id === docId);
+      const { data, error: err } = await supabase
+        .from('documents')
+        .update({ status })
+        .eq('id', docId)
+        .select('*')
+        .single<DocumentRow>();
+      if (err || !data) {
+        fail(err, 'Document status could not be changed');
+        return;
+      }
+      const updated = documentFromRow(data);
+      setState((prev) => ({ ...prev, documents: prev.documents.map((item) => (item.id === docId ? updated : item)) }));
+      if (doc) {
+        void writeActivity({
+          action: `marked a document as ${status.toLowerCase()}`,
+          actionType: status === 'Verified' ? 'verified' : status === 'Rejected' ? 'rejected' : 'status-changed',
+          employerId: doc.employerId,
+          employerName: employerNameOf(doc.employerId),
+          detail: doc.name,
+        });
+      }
+    },
+    [fail, employerNameOf, writeActivity],
+  );
+
+  const removeDocument = useCallback<AppStoreValue['removeDocument']>(
+    async (docId) => {
+      const doc = stateRef.current.documents.find((d) => d.id === docId);
+      if (doc?.storagePath) await supabase.storage.from(DOCUMENTS_BUCKET).remove([doc.storagePath]);
+      const { error: err } = await supabase.from('documents').delete().eq('id', docId);
+      if (err) {
+        fail(err, 'Document could not be deleted');
+        return;
+      }
+      setState((prev) => ({ ...prev, documents: prev.documents.filter((d) => d.id !== docId) }));
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Notes                                                             */
   /* ---------------------------------------------------------------- */
 
   const addNote = useCallback<AppStoreValue['addNote']>(
-    (employerId, body, pinned = false) => {
-      setState((current) => ({
-        ...current,
-        notes: [
-          {
-            id: uid('note'),
-            employerId,
-            author: CURRENT_USER.name,
-            body,
-            createdAt: isoOffset(0, 0),
-            pinned,
-          },
-          ...current.notes,
-        ],
-        activity: [
-          {
-            id: uid('act'),
-            user: CURRENT_USER.name,
-            userInitials: CURRENT_USER.initials,
-            action: 'added an internal note',
-            actionType: 'updated',
-            employerId,
-            employerName: current.employers.find((e) => e.id === employerId)?.companyName ?? '—',
-            timestamp: isoOffset(0, 0),
-            detail: body.slice(0, 90),
-          },
-          ...current.activity,
-        ],
-      }));
+    async (employerId, body, pinned = false) => {
+      const note: Note = {
+        id: crypto.randomUUID(),
+        employerId,
+        author: actor.name,
+        body,
+        createdAt: isoOffset(0, 0),
+        pinned,
+      };
+      const { data, error: err } = await supabase
+        .from('notes')
+        .insert(noteToRow(note, actor.id))
+        .select('*')
+        .single<NoteRow>();
+      if (err || !data) {
+        fail(err, 'Note could not be added');
+        return;
+      }
+      const saved = noteFromRow(data);
+      setState((prev) => ({ ...prev, notes: [saved, ...prev.notes] }));
+      void writeActivity({
+        action: 'added an internal note',
+        actionType: 'updated',
+        employerId,
+        employerName: employerNameOf(employerId),
+        detail: body.slice(0, 90),
+      });
       toast({ title: 'Note added', variant: 'success' });
     },
-    [toast],
+    [actor.id, actor.name, fail, employerNameOf, toast, writeActivity],
   );
 
-  const deleteNote = useCallback<AppStoreValue['deleteNote']>((noteId) => {
-    setState((current) => ({ ...current, notes: current.notes.filter((n) => n.id !== noteId) }));
-  }, []);
+  const deleteNote = useCallback<AppStoreValue['deleteNote']>(
+    async (noteId) => {
+      const { error: err } = await supabase.from('notes').delete().eq('id', noteId);
+      if (err) {
+        fail(err, 'Note could not be deleted');
+        return;
+      }
+      setState((prev) => ({ ...prev, notes: prev.notes.filter((n) => n.id !== noteId) }));
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Presets                                                           */
   /* ---------------------------------------------------------------- */
 
   const savePreset = useCallback<AppStoreValue['savePreset']>(
-    (name, description, filters) => {
-      setState((current) => ({
-        ...current,
-        presets: [
-          ...current.presets,
-          {
-            id: uid('preset'),
-            name,
-            description,
-            filters,
-            system: false,
-            createdAt: isoOffset(0, 0),
-            lastUsedAt: null,
-            useCount: 0,
-          },
-        ],
-      }));
+    async (name, description, filters) => {
+      if (!actor.id) return;
+      const { data, error: err } = await supabase
+        .from('filter_presets')
+        .insert({
+          user_id: actor.id,
+          name,
+          description,
+          filters: filters as unknown as Record<string, unknown>,
+          system: false,
+          use_count: 0,
+        })
+        .select('*')
+        .single<FilterPresetRow>();
+      if (err || !data) {
+        fail(err, 'Preset could not be saved');
+        return;
+      }
+      const saved = presetFromRow(data);
+      setState((prev) => ({ ...prev, presets: [...prev.presets, saved] }));
       toast({ title: 'Filter preset saved', description: name, variant: 'success' });
     },
-    [toast],
+    [actor.id, fail, toast],
   );
 
-  const renamePreset = useCallback<AppStoreValue['renamePreset']>((id, name, description) => {
-    setState((current) => ({
-      ...current,
-      presets: current.presets.map((preset) =>
-        preset.id === id ? { ...preset, name, description } : preset,
-      ),
-    }));
-  }, []);
+  const renamePreset = useCallback<AppStoreValue['renamePreset']>(
+    async (id, name, description) => {
+      const { data, error: err } = await supabase
+        .from('filter_presets')
+        .update({ name, description })
+        .eq('id', id)
+        .select('*')
+        .single<FilterPresetRow>();
+      if (err || !data) {
+        fail(err, 'Preset could not be renamed');
+        return;
+      }
+      const updated = presetFromRow(data);
+      setState((prev) => ({ ...prev, presets: prev.presets.map((p) => (p.id === id ? updated : p)) }));
+    },
+    [fail],
+  );
 
   const deletePreset = useCallback<AppStoreValue['deletePreset']>(
-    (id) => {
-      const preset = state.presets.find((p) => p.id === id);
-      setState((current) => ({ ...current, presets: current.presets.filter((p) => p.id !== id) }));
+    async (id) => {
+      const preset = stateRef.current.presets.find((p) => p.id === id);
+      if (preset?.system) {
+        toast({
+          title: 'Built-in preset',
+          description: 'System presets are shared and cannot be deleted.',
+          variant: 'info',
+        });
+        return;
+      }
+      const { error: err } = await supabase.from('filter_presets').delete().eq('id', id);
+      if (err) {
+        fail(err, 'Preset could not be deleted');
+        return;
+      }
+      setState((prev) => ({ ...prev, presets: prev.presets.filter((p) => p.id !== id) }));
       toast({ title: 'Preset deleted', description: preset?.name, variant: 'info' });
     },
-    [state.presets, toast],
+    [fail, toast],
   );
 
-  const markPresetUsed = useCallback<AppStoreValue['markPresetUsed']>((id) => {
-    setState((current) => ({
-      ...current,
-      presets: current.presets.map((preset) =>
-        preset.id === id
-          ? { ...preset, lastUsedAt: isoOffset(0, 0), useCount: preset.useCount + 1 }
-          : preset,
-      ),
-    }));
-  }, []);
+  const markPresetUsed = useCallback<AppStoreValue['markPresetUsed']>(
+    async (id) => {
+      const preset = stateRef.current.presets.find((p) => p.id === id);
+      if (!preset) return;
+      const lastUsedAt = isoOffset(0, 0);
+      const useCount = preset.useCount + 1;
+      setState((prev) => ({
+        ...prev,
+        presets: prev.presets.map((p) => (p.id === id ? { ...p, lastUsedAt, useCount } : p)),
+      }));
+      /* System presets are shared and read-only, so usage is tracked locally. */
+      if (preset.system) return;
+      const { error: err } = await supabase
+        .from('filter_presets')
+        .update({ last_used_at: lastUsedAt, use_count: useCount })
+        .eq('id', id);
+      if (err) fail(err, 'Preset usage could not be recorded');
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Notifications                                                     */
   /* ---------------------------------------------------------------- */
 
-  const markNotificationRead = useCallback<AppStoreValue['markNotificationRead']>((id, read = true) => {
-    setState((current) => ({
-      ...current,
-      notifications: current.notifications.map((item) =>
-        item.id === id ? { ...item, read } : item,
-      ),
-    }));
-  }, []);
+  const markNotificationRead = useCallback<AppStoreValue['markNotificationRead']>(
+    async (id, read = true) => {
+      setState((prev) => ({
+        ...prev,
+        notifications: prev.notifications.map((item) => (item.id === id ? { ...item, read } : item)),
+      }));
+      const { error: err } = await supabase.from('notifications').update({ read }).eq('id', id);
+      if (err) fail(err, 'Notification could not be updated');
+    },
+    [fail],
+  );
 
-  const markAllNotificationsRead = useCallback(() => {
-    setState((current) => ({
-      ...current,
-      notifications: current.notifications.map((item) => ({ ...item, read: true })),
-    }));
+  const markAllNotificationsRead = useCallback<AppStoreValue['markAllNotificationsRead']>(async () => {
+    if (!actor.id) return;
+    setState((prev) => ({ ...prev, notifications: prev.notifications.map((item) => ({ ...item, read: true })) }));
+    const { error: err } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', actor.id)
+      .eq('read', false);
+    if (err) {
+      fail(err, 'Notifications could not be updated');
+      return;
+    }
     toast({ title: 'All notifications marked as read', variant: 'success' });
-  }, [toast]);
+  }, [actor.id, fail, toast]);
 
-  const dismissNotification = useCallback<AppStoreValue['dismissNotification']>((id) => {
-    setState((current) => ({
-      ...current,
-      notifications: current.notifications.filter((item) => item.id !== id),
-    }));
-  }, []);
+  const dismissNotification = useCallback<AppStoreValue['dismissNotification']>(
+    async (id) => {
+      setState((prev) => ({ ...prev, notifications: prev.notifications.filter((item) => item.id !== id) }));
+      const { error: err } = await supabase.from('notifications').delete().eq('id', id);
+      if (err) fail(err, 'Notification could not be deleted');
+    },
+    [fail],
+  );
 
   /* ---------------------------------------------------------------- */
-  /* Settings & filters                                                */
+  /* Maintenance                                                       */
   /* ---------------------------------------------------------------- */
-
-  const updateSettings = useCallback<AppStoreValue['updateSettings']>((patch) => {
-    setState((current) => ({ ...current, settings: { ...current.settings, ...patch } }));
-  }, []);
-
-  const setEmployerColumns = useCallback<AppStoreValue['setEmployerColumns']>((columns) => {
-    setState((current) => ({ ...current, employerColumns: columns }));
-  }, []);
-
-  const persistFilters = useCallback<AppStoreValue['persistFilters']>((filters) => {
-    setState((current) => ({ ...current, savedFilters: filters }));
-  }, []);
 
   const resetDemoData = useCallback(() => {
-    window.localStorage.removeItem(STORAGE_KEY);
-    const fresh = initialState();
-    setState(fresh);
-    toast({ title: 'Demo data restored', description: 'All changes have been reset to the original dataset.', variant: 'info' });
-  }, [toast]);
+    void load();
+    toast({
+      title: 'Reloaded from the database',
+      description: 'Your local view has been refreshed with the current server data.',
+      variant: 'info',
+    });
+  }, [load, toast]);
+
+  const logActivity = useCallback<AppStoreValue['logActivity']>(
+    (entry) => {
+      void writeActivity(entry);
+    },
+    [writeActivity],
+  );
 
   /* ---------------------------------------------------------------- */
   /* Value                                                             */
@@ -1254,6 +1783,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStoreValue>(
     () => ({
       ...state,
+      loading,
+      error,
+      refresh: load,
+      comparison,
       records,
       unreadCount,
       shortlistedIds,
@@ -1264,6 +1797,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setEmployerStatus,
       setVerification,
       advanceVerification,
+      setContractStatus,
       archiveEmployer,
       restoreEmployer,
       deleteEmployer,
@@ -1280,7 +1814,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       toggleRequirement,
       setRequirementStatus,
       addDocument,
+      uploadDocument,
       updateDocument,
+      replaceDocumentFile,
       setDocumentStatus,
       removeDocument,
       addNote,
@@ -1303,6 +1839,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       state,
+      loading,
+      error,
+      load,
+      comparison,
       records,
       unreadCount,
       shortlistedIds,
@@ -1313,6 +1853,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setEmployerStatus,
       setVerification,
       advanceVerification,
+      setContractStatus,
       archiveEmployer,
       restoreEmployer,
       deleteEmployer,
@@ -1329,7 +1870,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       toggleRequirement,
       setRequirementStatus,
       addDocument,
+      uploadDocument,
       updateDocument,
+      replaceDocumentFile,
       setDocumentStatus,
       removeDocument,
       addNote,
@@ -1351,6 +1894,34 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       resetDemoData,
     ],
   );
+
+  /* Block the UI until the first fetch resolves so pages never flash empty. */
+  if (loading) {
+    return (
+      <div className="bg-ink-100 flex min-h-screen items-center justify-center">
+        <LoadingState label="Loading your workspace…" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-ink-100 flex min-h-screen items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <EmptyState
+            variant="error"
+            title="Could not load the workspace"
+            description={error}
+            action={
+              <Button variant="primary" onClick={() => void load()}>
+                Try again
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
 
   return <AppStoreContext.Provider value={value}>{children}</AppStoreContext.Provider>;
 }

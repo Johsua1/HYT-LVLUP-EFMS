@@ -174,6 +174,8 @@ export interface DocumentRecord {
   type: string;
   fileName: string;
   fileSizeKb: number;
+  /** Path of the uploaded object in the Supabase Storage `documents` bucket. */
+  storagePath: string | null;
   uploadedAt: string;
   uploadedBy: string;
   expiresAt: string | null;

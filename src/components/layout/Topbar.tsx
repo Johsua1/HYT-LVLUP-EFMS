@@ -11,11 +11,13 @@ import {
   RotateCcw,
   Search,
   Settings as SettingsIcon,
+  ShieldCheck,
   Trash2,
+  UserCog,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, initialsOf } from '@/lib/utils';
 import { useAppStore } from '@/store/AppStore';
-import { CURRENT_USER } from '@/data/dataset';
+import { useAuth } from '@/auth/AuthProvider';
 import { Badge, CountPill } from '@/components/ui/Badge';
 import { Button, IconButton } from '@/components/ui/Button';
 import { Dropdown } from '@/components/ui/Dropdown';
@@ -30,6 +32,7 @@ export interface TopbarProps {
 
 export function Topbar({ onOpenMobileNav }: TopbarProps) {
   const navigate = useNavigate();
+  const { profile, signOut, isAdmin, mfaVerified } = useAuth();
   const {
     notifications,
     unreadCount,
@@ -37,9 +40,12 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
     markAllNotificationsRead,
     dismissNotification,
     resetDemoData,
-    toast,
   } = useAppStore();
   const [query, setQuery] = useState('');
+
+  const displayName = profile?.full_name || profile?.email || 'Signed-in user';
+  const displayRole = profile?.job_title || (profile?.role === 'admin' ? 'Administrator' : 'Staff');
+  const displayInitials = profile?.initials || initialsOf(displayName);
 
   const recent = notifications.slice(0, 6);
 
@@ -71,6 +77,11 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
       </form>
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+        {isAdmin && (
+          <Badge tone={mfaVerified ? 'success' : 'warning'} icon={<ShieldCheck />} className="hidden lg:inline-flex">
+            {mfaVerified ? 'MFA verified' : 'MFA required'}
+          </Badge>
+        )}
         <Badge tone="warning" icon={<Info />} className="hidden xl:inline-flex">
           Demo data — fictional employers
         </Badge>
@@ -195,8 +206,8 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                   key: 'profile',
                   label: (
                     <span className="flex flex-col">
-                      <span className="text-ink-900 text-[13px] font-semibold">{CURRENT_USER.name}</span>
-                      <span className="text-ink-500 text-[11px]">{CURRENT_USER.role}</span>
+                      <span className="text-ink-900 text-[13px] font-semibold">{displayName}</span>
+                      <span className="text-ink-500 text-[11px]">{displayRole}</span>
                     </span>
                   ),
                   icon: <CircleUser />,
@@ -207,12 +218,27 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
             {
               key: 'actions',
               items: [
+                ...(isAdmin
+                  ? [
+                      {
+                        key: 'admin-dashboard',
+                        label: 'Admin Dashboard',
+                        icon: <ShieldCheck />,
+                        onSelect: () => navigate('/admin/dashboard'),
+                      },
+                      {
+                        key: 'admin-staff',
+                        label: 'Staff Management',
+                        icon: <UserCog />,
+                        onSelect: () => navigate('/admin/staff'),
+                      },
+                    ]
+                  : []),
                 { key: 'settings', label: 'Settings', icon: <SettingsIcon />, onSelect: () => navigate('/settings') },
                 {
                   key: 'reset',
-                  label: 'Reset demo data',
+                  label: 'Reload from database',
                   icon: <RotateCcw />,
-                  tone: 'danger',
                   onSelect: () => {
                     resetDemoData();
                     navigate('/dashboard');
@@ -222,12 +248,9 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                   key: 'signout',
                   label: 'Sign out',
                   icon: <Trash2 />,
-                  onSelect: () =>
-                    toast({
-                      title: 'Sign out is disabled',
-                      description: 'This prototype has no authentication layer.',
-                      variant: 'info',
-                    }),
+                  onSelect: () => {
+                    void signOut();
+                  },
                 },
               ],
             },
@@ -244,12 +267,12 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                 open && 'bg-ink-100',
               )}
             >
-              <UserAvatar initials={CURRENT_USER.initials} size="sm" />
+              <UserAvatar initials={displayInitials} size="sm" />
               <span className="hidden text-left lg:block">
                 <span className="text-ink-800 block text-[12px] leading-tight font-semibold">
-                  {CURRENT_USER.name}
+                  {displayName}
                 </span>
-                <span className="text-ink-500 block text-[10px] leading-tight">{CURRENT_USER.role}</span>
+                <span className="text-ink-500 block text-[10px] leading-tight">{displayRole}</span>
               </span>
               <ChevronDown className="text-ink-400 h-3.5 w-3.5" />
             </button>
@@ -267,8 +290,8 @@ export function DemoDataBanner() {
       <p className="text-amber-800 flex items-center gap-1.5 text-[11px] font-medium">
         <Info className="h-3.5 w-3.5 shrink-0" />
         <span>
-          Prototype with sample data. Every employer, contract and fee below is fictional and stored only in this
-          browser. <Link to="/settings" className="underline underline-offset-2">Reset demo data</Link> at any time.
+          Sample dataset. Every employer, contract and fee below is fictional, but all records are stored in your
+          Supabase database and shared across the team.
         </span>
       </p>
     </div>

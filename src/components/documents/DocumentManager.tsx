@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FileText, Paperclip, Trash2, Upload, UploadCloud, X } from 'lucide-react';
+import { Download, FileText, Paperclip, Trash2, Upload, UploadCloud, X } from 'lucide-react';
 import type { DocumentRecord, DocumentStatus, TableColumn } from '@/types';
 import { DOCUMENT_STATUSES, DOCUMENT_TYPES } from '@/lib/constants';
 import { cn, dateOnly, formatFileSize } from '@/lib/utils';
 import { useAppStore } from '@/store/AppStore';
+import { useAuth } from '@/auth/AuthProvider';
+import { createDocumentSignedUrl } from '@/lib/supabase';
 import { DataTable } from '@/components/common/DataTable';
 import { DocumentStatusBadge } from '@/components/common/StatusBadge';
 import { DateText } from '@/components/common/ValueText';
@@ -43,9 +45,26 @@ export function DocumentTable({
   onDelete,
   emptyAction,
 }: DocumentTableProps) {
-  const { employers, setDocumentStatus } = useAppStore();
+  const { employers, setDocumentStatus, toast } = useAppStore();
 
   const employerName = (id: string) => employers.find((employer) => employer.id === id)?.companyName ?? '—';
+
+  const openDocument = async (document: DocumentRecord) => {
+    if (!document.storagePath) {
+      toast({
+        title: 'No file attached',
+        description: 'This document record has no uploaded file — only metadata was saved.',
+        variant: 'info',
+      });
+      return;
+    }
+    const { url, error } = await createDocumentSignedUrl(document.storagePath, 120);
+    if (error || !url) {
+      toast({ title: 'Could not open file', description: error ?? 'Unknown error.', variant: 'error' });
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
 
   const columns = useMemo<TableColumn<DocumentRecord>[]>(() => {
     const base: TableColumn<DocumentRecord>[] = [
@@ -140,6 +159,16 @@ export function DocumentTable({
         width: '6rem',
         render: (document) => (
           <div className="flex items-center justify-end gap-1">
+            <Tooltip content={document.storagePath ? 'Open file' : 'No file attached'}>
+              <IconButton
+                size="sm"
+                label={`Open ${document.name}`}
+                disabled={!document.storagePath}
+                onClick={() => void openDocument(document)}
+              >
+                <Download />
+              </IconButton>
+            </Tooltip>
             <Tooltip content="Edit document">
               <IconButton size="sm" label={`Edit ${document.name}`} onClick={() => onEdit(document)}>
                 <Paperclip />
@@ -161,7 +190,7 @@ export function DocumentTable({
     );
 
     return base;
-  }, [showEmployer, employers, setDocumentStatus, onEdit, onDelete]);
+  }, [showEmployer, employers, setDocumentStatus, onEdit, onDelete, toast]);
 
   return (
     <DataTable
@@ -206,13 +235,16 @@ interface DocumentDraft {
 /**
  * Add / edit document dialog.
  *
- * The file picker reads the chosen file's name and size into component state —
- * there is no upload endpoint, which is the whole point of a frontend-only
- * prototype. Everything else behaves like the real record.
+ * When a file is chosen it is uploaded to the private Supabase Storage
+ * `documents` bucket and the record stores its path; without a file only the
+ * metadata row is written (useful for logging a document that lives offline).
  */
 export function DocumentFormModal({ open, onClose, employerId, document }: DocumentFormModalProps) {
-  const { employers, addDocument, updateDocument, toast } = useAppStore();
+  const { employers, addDocument, updateDocument, uploadDocument, replaceDocumentFile, toast } = useAppStore();
+  const { profile } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const [draft, setDraft] = useState<DocumentDraft>({
     name: '',
@@ -229,6 +261,7 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
   useEffect(() => {
     if (!open) return;
     setErrors({});
+    setFile(null);
     if (document) {
       setDraft({
         name: document.name,
@@ -254,17 +287,18 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
     }
   }, [open, document, employerId, employers]);
 
-  const handleFile = (file: File | undefined) => {
-    if (!file) return;
+  const handleFile = (selected: File | undefined) => {
+    if (!selected) return;
+    setFile(selected);
     setDraft((current) => ({
       ...current,
-      fileName: file.name,
-      fileSizeKb: Math.max(1, Math.round(file.size / 1024)),
-      name: current.name || file.name.replace(/\.[^.]+$/, ''),
+      fileName: selected.name,
+      fileSizeKb: Math.max(1, Math.round(selected.size / 1024)),
+      name: current.name || selected.name.replace(/\.[^.]+$/, ''),
     }));
   };
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     const nextErrors: Record<string, string> = {};
@@ -276,30 +310,68 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
       return;
     }
 
-    const payload = {
-      name: draft.name.trim(),
-      type: draft.type,
-      fileName: draft.fileName || `${draft.name.trim().toLowerCase().replace(/\s+/g, '-')}.pdf`,
-      fileSizeKb: draft.fileSizeKb || 240,
-      uploadedAt: new Date().toISOString(),
-      uploadedBy: 'Johsua Rivera',
-      expiresAt: fromDateInput(draft.expiresAt),
-      status: draft.status,
-      notes: draft.notes.trim(),
-    };
+    const uploadedBy = profile?.full_name || profile?.email || 'Unknown user';
+    const name = draft.name.trim();
+    const expiresAt = fromDateInput(draft.expiresAt);
 
-    if (document) {
-      updateDocument(document.id, payload);
-      toast({ title: 'Document updated', description: payload.name, variant: 'success' });
-    } else {
-      addDocument(draft.employerId, payload);
-      toast({
-        title: 'Document added',
-        description: `${payload.name} was attached to ${employers.find((e) => e.id === draft.employerId)?.companyName ?? 'the employer'}.`,
-        variant: 'success',
-      });
+    setBusy(true);
+    try {
+      if (document) {
+        /* Editing an existing record — swap the file only if a new one was picked. */
+        if (file) {
+          const { error } = await replaceDocumentFile(document.id, file);
+          if (error) {
+            toast({ title: 'File upload failed', description: error, variant: 'error' });
+            return;
+          }
+        }
+        await updateDocument(document.id, {
+          name,
+          type: draft.type,
+          status: draft.status,
+          expiresAt,
+          notes: draft.notes.trim(),
+        });
+        toast({ title: 'Document updated', description: name, variant: 'success' });
+      } else if (file) {
+        const { error } = await uploadDocument(draft.employerId, file, {
+          name,
+          type: draft.type,
+          status: draft.status,
+          expiresAt,
+          notes: draft.notes.trim(),
+        });
+        if (error) {
+          toast({ title: 'File upload failed', description: error, variant: 'error' });
+          return;
+        }
+        toast({
+          title: 'Document uploaded',
+          description: `${name} was attached to ${employers.find((e) => e.id === draft.employerId)?.companyName ?? 'the employer'}.`,
+          variant: 'success',
+        });
+      } else {
+        await addDocument(draft.employerId, {
+          name,
+          type: draft.type,
+          fileName: draft.fileName || `${name.toLowerCase().replace(/\s+/g, '-')}.pdf`,
+          fileSizeKb: draft.fileSizeKb || 240,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy,
+          expiresAt,
+          status: draft.status,
+          notes: draft.notes.trim(),
+        });
+        toast({
+          title: 'Document added',
+          description: `${name} was attached to ${employers.find((e) => e.id === draft.employerId)?.companyName ?? 'the employer'}.`,
+          variant: 'success',
+        });
+      }
+      onClose();
+    } finally {
+      setBusy(false);
     }
-    onClose();
   };
 
   return (
@@ -311,15 +383,15 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
       title={document ? `Edit ${document.name}` : 'Upload document'}
       description={
         document
-          ? 'Update the document record and its validity.'
-          : 'Attach a compliance document to an employer. The file stays in your browser — nothing is uploaded to a server.'
+          ? 'Update the document record and its validity. Choose a new file to replace the stored copy.'
+          : 'Attach a compliance document to an employer. Files are uploaded securely to Supabase Storage.'
       }
       footer={
         <>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button type="submit" form="document-form" variant="primary" icon={<Upload />}>
+          <Button type="submit" form="document-form" variant="primary" icon={<Upload />} loading={busy}>
             {document ? 'Save document' : 'Add document'}
           </Button>
         </>
@@ -355,7 +427,10 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
                     size="xs"
                     variant="ghost"
                     icon={<X />}
-                    onClick={() => setDraft((current) => ({ ...current, fileName: '', fileSizeKb: 0 }))}
+                    onClick={() => {
+                      setFile(null);
+                      setDraft((current) => ({ ...current, fileName: '', fileSizeKb: 0 }));
+                    }}
                   >
                     Remove
                   </Button>
@@ -365,7 +440,7 @@ export function DocumentFormModal({ open, onClose, employerId, document }: Docum
               <>
                 <UploadCloud className="text-ink-400 h-5 w-5" />
                 <p className="text-ink-600 text-[13px]">Select a file from this device</p>
-                <p className="text-ink-500 text-[11px]">PDF, DOCX, JPG, PNG or XLSX · simulated, no upload</p>
+                <p className="text-ink-500 text-[11px]">PDF, DOCX, XLSX, JPG, PNG or WEBP · up to 10 MB</p>
                 <Button size="xs" variant="outline" onClick={() => fileInputRef.current?.click()}>
                   Choose file
                 </Button>

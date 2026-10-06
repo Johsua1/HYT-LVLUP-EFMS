@@ -5,12 +5,15 @@ import {
   FileSignature,
   FolderOpen,
   Heart,
+  History,
   LayoutDashboard,
   ListChecks,
   Receipt,
   Scale,
   Settings,
+  ShieldCheck,
   SlidersHorizontal,
+  UserCog,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -27,6 +30,8 @@ export interface NavSection {
   id: string;
   label: string;
   items: NavItem[];
+  /** Only rendered for administrators (and only after MFA). */
+  adminOnly?: boolean;
 }
 
 /**
@@ -36,6 +41,37 @@ export interface NavSection {
  * database → filtering and evaluation → compliance paperwork → system tools.
  */
 export const NAV_SECTIONS: NavSection[] = [
+  {
+    id: 'administration',
+    label: 'Administration',
+    adminOnly: true,
+    items: [
+      {
+        to: '/admin/dashboard',
+        label: 'Admin Dashboard',
+        icon: ShieldCheck,
+        description: 'Team and security overview for administrators.',
+      },
+      {
+        to: '/admin/staff',
+        label: 'Staff Management',
+        icon: UserCog,
+        description: 'Invite staff, edit details, and control account access.',
+      },
+      {
+        to: '/admin/activity',
+        label: 'Activity Log',
+        icon: History,
+        description: 'Attributed audit trail of every action taken in the workspace.',
+      },
+      {
+        to: '/admin/settings',
+        label: 'Admin Settings',
+        icon: Settings,
+        description: 'Administrator account and two-factor settings.',
+      },
+    ],
+  },
   {
     id: 'overview',
     label: 'Overview',

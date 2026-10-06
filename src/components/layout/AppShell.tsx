@@ -58,8 +58,8 @@ export function AppShell() {
 
         <footer className="border-ink-200 text-ink-500 no-print border-t px-4 py-4 text-[11px]">
           <div className="mx-auto flex max-w-[100rem] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <p>EFMS · Employer Filtering Management System — frontend prototype.</p>
-            <p>Data is stored in this browser only. No server, no database, no real employers.</p>
+            <p>EFMS · Employer Filtering Management System.</p>
+            <p>Sample data only. Records are stored in your Supabase database.</p>
           </div>
         </footer>
       </div>

@@ -283,7 +283,7 @@ export default function DashboardPage() {
             <div>
               <h2 className="text-ink-900 text-sm font-semibold">Recent activity</h2>
               <p className="text-ink-500 mt-0.5 text-xs">
-                Latest actions recorded in this browser, newest first.
+                Latest actions recorded in the workspace, newest first.
               </p>
             </div>
             <Link to="/reports" className="text-brand-700 hover:text-brand-800 text-xs font-medium">
