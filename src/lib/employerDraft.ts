@@ -68,7 +68,7 @@ export function createEmptyDraft(defaults?: {
 
 /** Projects an existing employer back into the form shape for editing. */
 export function draftFromRecord(record: EmployerRecord): EmployerDraft {
-  const { employer, primaryJob, fees } = record;
+  const { employer, primaryJob, fees, contract } = record;
   const feeMap = emptyFeeSchedule();
   fees.forEach((fee) => {
     feeMap[fee.type] = fee.amount;
@@ -96,7 +96,11 @@ export function draftFromRecord(record: EmployerRecord): EmployerDraft {
     salaryMinLocal: primaryJob?.salaryMinLocal ?? 0,
     salaryMaxLocal: primaryJob?.salaryMaxLocal ?? 0,
     currency: primaryJob?.currency ?? 'PHP',
-    contractDurationMonths: primaryJob?.contractDurationMonths ?? 36,
+    /* "Contract duration" belongs to the contract, which is one-per-employer,
+       so read it there. An employer may hold several job orders and the
+       primary one need not carry the same term — reading the job order would
+       make a saved duration appear to revert. */
+    contractDurationMonths: contract?.durationMonths ?? primaryJob?.contractDurationMonths ?? 36,
     workingHours: primaryJob?.workingHours ?? '8 hours/day',
     overtime: primaryJob?.overtime ?? 'Available',
     employmentType: primaryJob?.employmentType ?? 'Full-time',

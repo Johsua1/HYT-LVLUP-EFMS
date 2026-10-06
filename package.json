@@ -21,8 +21,9 @@
     "test:contract:live": "esbuild scripts/test-contract-flow-live.ts --bundle --platform=node --format=esm --packages=external --outfile=scripts/.tmp-contract-flow-live.mjs && node scripts/.tmp-contract-flow-live.mjs",
     "test:verification": "esbuild scripts/test-verification-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-verification-flow.mjs && node scripts/.tmp-verification-flow.mjs",
     "test:renewal": "esbuild scripts/test-renewal-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-renewal-flow.mjs && node scripts/.tmp-renewal-flow.mjs",
+    "test:employer": "esbuild scripts/test-employer-edit-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-employer-edit-flow.mjs && node scripts/.tmp-employer-edit-flow.mjs",
     "test:guard": "esbuild scripts/test-inspect-guard.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-inspect-guard.mjs && node scripts/.tmp-inspect-guard.mjs",
-    "test:flows": "npm run test:contract && npm run test:verification && npm run test:renewal && npm run test:guard"
+    "test:flows": "npm run test:contract && npm run test:verification && npm run test:renewal && npm run test:employer && npm run test:guard"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",

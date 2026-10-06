@@ -137,7 +137,15 @@ export function feeTotalsOf(fees: FeeItem[]): Record<FeeType, number> {
   return totals;
 }
 
-function pickPrimaryJob(jobs: JobOrder[]): JobOrder | null {
+/**
+ * The job order the employer profile and edit form present as "the" job.
+ *
+ * Open orders win, then the one needing the most workers. Both the read path
+ * (`buildEmployerRecords`) and the write path (`saveEmployer`) must use this
+ * same rule, otherwise an edit lands on one job order while the form keeps
+ * displaying another.
+ */
+export function pickPrimaryJob(jobs: JobOrder[]): JobOrder | null {
   if (!jobs.length) return null;
   const open = jobs.filter((job) => job.status === 'Open');
   const pool = open.length ? open : jobs;

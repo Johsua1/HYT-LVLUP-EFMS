@@ -35,7 +35,7 @@ import type {
   VerificationStatus,
 } from '@/types';
 import { COUNTRY_CODE, CURRENCIES, FEE_TYPES, REQUIREMENT_TEMPLATE } from '@/lib/constants';
-import { buildEmployerRecords, deriveContractStatus, renewalTerm } from '@/lib/selectors';
+import { buildEmployerRecords, deriveContractStatus, pickPrimaryJob, renewalTerm } from '@/lib/selectors';
 import { MAX_COMPARISON } from '@/types';
 import { addMonths, dateOnly, isoOffset, uid } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
@@ -920,7 +920,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
       const updatedEmployer = employerFromRow(empRow);
 
-      const existingJob = stateRef.current.jobs.find((job) => job.employerId === id);
+      /* The registration form edits one job order — the same one the profile
+         surfaces as its primary job. Target that exact row, not merely the
+         first one for the employer, or the edit lands on a different job
+         order and the form keeps showing the old values when reopened. */
+      const existingJob = pickPrimaryJob(stateRef.current.jobs.filter((job) => job.employerId === id));
       const job: JobOrder = existingJob
         ? {
             ...existingJob,
