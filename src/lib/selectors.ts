@@ -97,6 +97,29 @@ export function verificationStagesCompleted(
 }
 
 /**
+ * The event for the stage currently sitting in the "Returned" state, if any.
+ *
+ * A return means the stage was sent back to the employer for revision. The
+ * stage is returned when the employer is in the revision state and the event
+ * for the stage it is on carries a `failed` outcome. Callers use this to find
+ * the exact row to put back into review once the employer has responded —
+ * renewing a contract is the response to a returned contract review.
+ */
+export function returnedStageEvent(
+  employer: Pick<Employer, 'id' | 'verification' | 'verificationStage'>,
+  events: VerificationEvent[],
+): VerificationEvent | null {
+  if (employer.verification !== 'Requires Revision') return null;
+  const stage = VERIFICATION_STAGES[employer.verificationStage];
+  if (!stage) return null;
+  return (
+    events.find(
+      (event) => event.employerId === employer.id && event.stage === stage.label && event.outcome === 'failed',
+    ) ?? null
+  );
+}
+
+/**
  * Collapses the requirement checklist into the four buckets the filter panel
  * exposes, so the UI never has to reason about individual checklist items.
  */

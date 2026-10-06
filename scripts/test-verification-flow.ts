@@ -9,8 +9,8 @@
  * Run with:  npm run test:verification
  */
 import { VERIFICATION_STAGES } from '../src/lib/constants';
-import { verificationStagesCompleted } from '../src/lib/selectors';
-import type { VerificationStatus } from '../src/types';
+import { returnedStageEvent, verificationStagesCompleted } from '../src/lib/selectors';
+import type { VerificationEvent, VerificationStatus } from '../src/types';
 
 let passed = 0;
 let failed = 0;
@@ -66,6 +66,45 @@ const inflightOutcomes = VERIFICATION_STAGES.map((_, index) =>
 check('3 completed', inflightOutcomes.filter((o) => o === 'completed').length, 3);
 check('1 in progress', inflightOutcomes.filter((o) => o === 'current').length, 1);
 check('1 not started', inflightOutcomes.filter((o) => o === 'pending').length, 1);
+
+console.log('\n[returnedStageEvent] the stage a renewal should put back in review');
+const CONTRACT_STAGE = VERIFICATION_STAGES[2].label;
+const event = (stage: string, outcome: VerificationEvent['outcome'], employerId = 'emp-1'): VerificationEvent => ({
+  id: `${employerId}-${stage}`,
+  employerId,
+  stage,
+  actor: 'Johsua Rivera',
+  timestamp: '2026-09-29T09:00:00.000Z',
+  outcome,
+  comment: '',
+});
+
+/* Gulf Construction Services: stage 3 (Contract Reviewed) returned. */
+const gulfEvents = [
+  event(VERIFICATION_STAGES[0].label, 'completed'),
+  event(VERIFICATION_STAGES[1].label, 'completed'),
+  event(CONTRACT_STAGE, 'failed'),
+  event(VERIFICATION_STAGES[3].label, 'pending'),
+  event(VERIFICATION_STAGES[4].label, 'pending'),
+];
+const gulf = { id: 'emp-1', verification: 'Requires Revision' as VerificationStatus, verificationStage: 2 };
+check('finds the returned contract stage', returnedStageEvent(gulf, gulfEvents)?.stage, CONTRACT_STAGE);
+
+check(
+  'a healthy employer has nothing to reopen',
+  returnedStageEvent({ ...gulf, verification: 'Under Review' }, gulfEvents),
+  null,
+);
+check(
+  'a returned stage with no failed event is ignored',
+  returnedStageEvent(gulf, gulfEvents.map((e) => ({ ...e, outcome: 'completed' as const }))),
+  null,
+);
+check(
+  'another employer’s return is not picked up',
+  returnedStageEvent(gulf, gulfEvents.map((e) => ({ ...e, employerId: 'emp-2' }))),
+  null,
+);
 
 console.log(`\n${passed} passed, ${failed} failed\n`);
 process.exit(failed === 0 ? 0 : 1);

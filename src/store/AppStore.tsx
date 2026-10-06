@@ -35,7 +35,13 @@ import type {
   VerificationStatus,
 } from '@/types';
 import { COUNTRY_CODE, CURRENCIES, FEE_TYPES, REQUIREMENT_TEMPLATE } from '@/lib/constants';
-import { buildEmployerRecords, deriveContractStatus, pickPrimaryJob, renewalTerm } from '@/lib/selectors';
+import {
+  buildEmployerRecords,
+  deriveContractStatus,
+  pickPrimaryJob,
+  renewalTerm,
+  returnedStageEvent,
+} from '@/lib/selectors';
 import { MAX_COMPARISON } from '@/types';
 import { addMonths, dateOnly, isoOffset, uid } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
@@ -1168,6 +1174,71 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   /**
+   * Drops a "Returned" verification stage back into review.
+   *
+   * A return means "fix this and resubmit" — renewing the contract is that
+   * resubmission. Clearing the failed outcome stops the timeline showing
+   * "Returned" against a contract that has since been renewed, and the
+   * employer stops reading as Requires Revision. The stage is *not*
+   * auto-approved: it returns to "In progress" so the reviewer still makes
+   * the call. Best-effort — a renewal must not fail because of it.
+   */
+  const reopenReturnedContractStage = useCallback(
+    async (employerId: string) => {
+      const employer = stateRef.current.employers.find((e) => e.id === employerId);
+      if (!employer) return;
+
+      const returned = returnedStageEvent(employer, stateRef.current.verificationEvents);
+      if (!returned) return;
+      const stageLabel = returned.stage;
+
+      const now = isoOffset(0, 0);
+      const actor = profileRef.current?.full_name ?? 'Unknown user';
+
+      const { data: eventRow } = await supabase
+        .from('verification_events')
+        .update({
+          outcome: 'current',
+          actor,
+          occurred_at: now,
+          comment: `${stageLabel} returned to review — the contract was renewed.`,
+        })
+        .eq('id', returned.id)
+        .select('*')
+        .single<VerificationEventRow>();
+
+      const { data: empRow } = await supabase
+        .from('employers')
+        .update(
+          snakeize({ verification: 'Under Review', verificationUpdatedAt: now, updatedAt: now, updatedBy: actor }),
+        )
+        .eq('id', employerId)
+        .select('*')
+        .single<EmployerRow>();
+      if (!eventRow && !empRow) return;
+
+      setState((prev) => ({
+        ...prev,
+        employers: empRow
+          ? prev.employers.map((e) => (e.id === employerId ? employerFromRow(empRow) : e))
+          : prev.employers,
+        verificationEvents: eventRow
+          ? prev.verificationEvents.map((v) => (v.id === returned.id ? verificationEventFromRow(eventRow) : v))
+          : prev.verificationEvents,
+      }));
+
+      void writeActivity({
+        action: 'returned verification to review (contract renewed)',
+        actionType: 'status-changed',
+        employerId,
+        employerName: employer.companyName,
+        detail: `${stageLabel} had been Returned; the renewed contract puts it back in review.`,
+      });
+    },
+    [writeActivity],
+  );
+
+  /**
    * Renews a contract by extending the same record — no new row and no repeat
    * approval. The term rolls forward for another `durationMonths`, the renewal
    * marker flips to `Renewed`, and the employer is returned to good standing.
@@ -1210,6 +1281,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       /* A renewal puts the employer back in good standing. */
       await setEmployerStatus(employerId, 'Active');
 
+      /* A renewal is also the employer's answer to a returned contract
+         review, so that stage drops back into review. */
+      await reopenReturnedContractStage(employerId);
+
       void writeActivity({
         action: 'renewed the contract',
         actionType: 'updated',
@@ -1223,7 +1298,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         variant: 'success',
       });
     },
-    [fail, setEmployerStatus, writeActivity, employerNameOf, toast],
+    [fail, setEmployerStatus, reopenReturnedContractStage, writeActivity, employerNameOf, toast],
   );
 
   const archiveEmployer = useCallback<AppStoreValue['archiveEmployer']>(
