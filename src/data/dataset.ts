@@ -357,8 +357,8 @@ function buildNotifications(
     id: 'ntf-fee-1',
     category: 'Fee',
     title: 'Fee information updated',
-    message: 'Processing fee schedule revised for Sakura Manufacturing Group following the salary adjustment.',
-    employerId: 'emp-001',
+    message: 'Processing fee schedule revised for Toyota Motor Corporation following the salary adjustment.',
+    employerId: 'emp-101',
     createdAt: isoOffset(-3, 5),
     read: false,
     severity: 'info',
@@ -367,8 +367,8 @@ function buildNotifications(
     id: 'ntf-fee-2',
     category: 'Fee',
     title: 'Placement fee overdue',
-    message: 'Singapore Engineering Solutions — placement fee invoice is 30 days past due.',
-    employerId: 'emp-006',
+    message: 'Keppel Ltd — placement fee invoice is 30 days past due.',
+    employerId: 'emp-104',
     createdAt: isoOffset(-8, 3),
     read: true,
     severity: 'warning',
@@ -518,7 +518,7 @@ function buildActivity(
     employerId: null,
     employerName: 'All employers',
     timestamp: isoOffset(-2, 6),
-    detail: 'CSV export covering 12 employers across 10 destination countries.',
+    detail: 'CSV export covering 10 employers across 10 destination countries.',
   });
 
   return entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -608,19 +608,19 @@ export const FILTER_PRESETS: FilterPreset[] = [
 
 export const SHORTLIST_SEED: ShortlistEntry[] = [
   {
-    employerId: 'emp-001',
+    employerId: 'emp-101',
     note: 'Preferred for the next batch — strong dormitory setup and consistent overtime hours.',
     addedAt: isoOffset(-12, 4),
     addedBy: 'Johsua Rivera',
   },
   {
-    employerId: 'emp-007',
+    employerId: 'emp-105',
     note: 'Highest salary band in the portfolio. Nursing candidates should be prioritised here.',
     addedAt: isoOffset(-9, 2),
     addedBy: 'Angelo Cruz',
   },
   {
-    employerId: 'emp-003',
+    employerId: 'emp-102',
     note: 'Repeat client with zero placement disputes across three batches.',
     addedAt: isoOffset(-6, 8),
     addedBy: 'Maria Santos',

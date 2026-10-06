@@ -11,7 +11,7 @@
  *   node scripts/generate-seed.mjs
  *
  * Primary keys are deterministic UUIDv5 values derived from the original
- * domain ids (`emp-001`, `emp-001-job-1`, …) which makes the generated seed
+ * domain ids (`emp-101`, `emp-101-job-1`, …) which makes the generated seed
  * idempotent — re-running it upserts instead of duplicating.
  */
 import { build } from 'esbuild';

@@ -201,7 +201,7 @@ export function EmployerFormModal({ open, onClose, record }: EmployerFormModalPr
               value={draft.companyName}
               onChange={(event) => update('companyName', event.target.value)}
               error={visibleErrors.companyName}
-              placeholder="e.g. Sakura Manufacturing Group"
+              placeholder="e.g. Toyota Motor Corporation"
               containerClassName="sm:col-span-2"
             />
             <Input

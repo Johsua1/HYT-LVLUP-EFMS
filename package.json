@@ -14,6 +14,7 @@
     "sb:config": "supabase config push",
     "sb:smtp": "node scripts/configure-smtp.mjs",
     "sb:db:push": "supabase db push",
+    "sb:reseed": "node scripts/reseed.mjs",
     "sb:functions:deploy": "node scripts/deploy-functions.mjs",
     "sb:start": "supabase start",
     "sb:stop": "supabase stop",
