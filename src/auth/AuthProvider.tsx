@@ -244,9 +244,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, loadProfile]);
 
   const enrollMfa = useCallback<AuthContextValue['enrollMfa']>(async () => {
+    /* Clear any half-finished enrollments first. Every "Begin setup" click
+       creates a new factor, so without this they pile up (Supabase allows up to
+       10) — and Supabase rejects a second factor with the same friendly name
+       (`mfa_factor_name_conflict`), which silently blocks re-enrolment.
+       NOTE: listFactors() only lists VERIFIED factors under `totp`; unverified
+       ones appear only in `all`, so read `all` here. */
+    try {
+      const { data: existing } = await supabase.auth.mfa.listFactors();
+      const stale = ((existing?.all ?? []) as Factor[]).filter(
+        (factor) => factor.factor_type === 'totp' && factor.status !== 'verified',
+      );
+      for (const factor of stale) {
+        await supabase.auth.mfa.unenroll({ factorId: factor.id });
+      }
+    } catch {
+      /* Non-fatal — fall through and attempt to enrol anyway. */
+    }
+
     const { data, error } = await supabase.auth.mfa.enroll({
       factorType: 'totp',
-      friendlyName: `EFMS Admin · ${new Date().toISOString().slice(0, 10)}`,
+      /* Include the time so the name is unique per attempt — a duplicate name is
+         what previously made re-enrolment fail after the first try of the day. */
+      friendlyName: `EFMS Admin · ${new Date().toISOString().slice(0, 19).replace('T', ' ')}`,
     });
     if (error || !data) {
       const raw = error?.message ?? '';

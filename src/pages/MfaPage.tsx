@@ -105,13 +105,19 @@ export default function MfaPage() {
         {enrollment && (
           <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
             <div className="flex flex-col items-center gap-3">
+              {/* Rendered large on purpose: the Supabase QR is dense (81 modules),
+                  so a small box leaves each module ~2px and phone cameras can't
+                  resolve it. 256px+ keeps the modules scannable. */}
               <img
                 src={enrollment.qrCode}
                 alt="Scan this QR code with your authenticator app"
-                className="ring-ink-200 h-44 w-44 rounded-lg bg-white p-2 ring-1"
+                className="ring-ink-200 h-64 w-64 rounded-lg bg-white p-2 ring-1 sm:h-72 sm:w-72"
               />
               <div className="text-center">
-                <p className="text-ink-500 text-[11px]">Can't scan? Enter this key manually:</p>
+                <p className="text-ink-500 text-[11px]">
+                  Can't scan — for example if you're reading this on the same phone? Add this key in your authenticator
+                  app manually:
+                </p>
                 <code className="text-ink-800 mt-1 inline-block rounded bg-ink-100 px-2 py-1 text-xs font-semibold tracking-wider break-all">
                   {enrollment.secret}
                 </code>
