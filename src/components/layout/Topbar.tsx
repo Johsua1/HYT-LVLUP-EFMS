@@ -6,7 +6,6 @@ import {
   CheckCheck,
   ChevronDown,
   CircleUser,
-  Info,
   Menu,
   RotateCcw,
   Search,
@@ -63,8 +62,9 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
         <Menu />
       </IconButton>
 
-      {/* Global search */}
-      <form onSubmit={submitSearch} className="relative min-w-0 flex-1 max-w-xl" role="search">
+      {/* Global search — desktop only. On phones the field is too narrow to
+          read what you type, so search lives on the Employers page instead. */}
+      <form onSubmit={submitSearch} className="relative hidden min-w-0 max-w-xl flex-1 sm:block" role="search">
         <Search className="text-ink-400 pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
         <input
           type="search"
@@ -82,9 +82,6 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
             {mfaVerified ? 'MFA verified' : 'MFA required'}
           </Badge>
         )}
-        <Badge tone="warning" icon={<Info />} className="hidden xl:inline-flex">
-          Demo data — fictional employers
-        </Badge>
 
         {/* Notification centre */}
         <Popover
@@ -280,20 +277,5 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
         />
       </div>
     </header>
-  );
-}
-
-/** Slim banner shown once at the top of the app to satisfy the demo-data notice. */
-export function DemoDataBanner() {
-  return (
-    <div className="border-amber-200 bg-amber-50 border-b px-3 py-1.5 sm:px-4">
-      <p className="text-amber-800 flex items-center gap-1.5 text-[11px] font-medium">
-        <Info className="h-3.5 w-3.5 shrink-0" />
-        <span>
-          Sample dataset. Every employer, contract and fee below is fictional, but all records are stored in your
-          Supabase database and shared across the team.
-        </span>
-      </p>
-    </div>
   );
 }

@@ -21,7 +21,7 @@ export interface SavedFiltersProps {
 /**
  * Saved filter sets, persisted to localStorage through the store.
  *
- * System presets ship with the demo data; user presets are appended. Both are
+ * System presets ship with the application; user presets are appended. Both are
  * applied through the same code path, so a preset is nothing more than a stored
  * `FilterState`.
  */

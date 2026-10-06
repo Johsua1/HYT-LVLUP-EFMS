@@ -152,7 +152,7 @@ export const NAV_SECTIONS: NavSection[] = [
         description: 'Contract, document and verification alerts.',
       },
       { to: '/reports', label: 'Reports', icon: BarChart3, description: 'Portfolio analytics and distribution charts.' },
-      { to: '/settings', label: 'Settings', icon: Settings, description: 'Appearance, display and demo data controls.' },
+      { to: '/settings', label: 'Settings', icon: Settings, description: 'Appearance, display and account preferences.' },
     ],
   },
 ];

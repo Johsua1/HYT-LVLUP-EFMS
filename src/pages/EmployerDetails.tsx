@@ -181,9 +181,6 @@ export default function EmployerDetailsPage() {
             <Badge tone="neutral" size="md">
               Updated {relativeTime(employer.updatedAt)}
             </Badge>
-            <Badge tone="warning" size="md">
-              Fictional demo employer
-            </Badge>
           </div>
         }
         actions={

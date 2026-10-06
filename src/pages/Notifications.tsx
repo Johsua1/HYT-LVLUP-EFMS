@@ -225,7 +225,7 @@ export default function NotificationsPage() {
         <p className="text-ink-500 mt-3 text-[11px]">
           Every notification has been deleted.{' '}
           <Link to="/settings" className="text-brand-700 hover:underline font-medium">
-            Reset the demo data
+            Reload from the database
           </Link>{' '}
           to restore the original alerts.
         </p>

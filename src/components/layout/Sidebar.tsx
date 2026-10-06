@@ -150,7 +150,7 @@ export function Sidebar({ collapsed, onToggleCollapsed, mobileOpen, onCloseMobil
               <span className="text-[11px] font-semibold">Connected workspace</span>
             </div>
             <p className="text-ink-500 mt-1 text-[10px] leading-relaxed">
-              Fictional sample data, stored securely in your team's Supabase database.
+              Employer records are stored securely in your team's Supabase database.
             </p>
           </div>
         ) : null}

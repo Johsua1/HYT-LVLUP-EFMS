@@ -3,7 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { ToastViewport } from '@/components/ui/Toast';
 import { Sidebar } from './Sidebar';
-import { DemoDataBanner, Topbar } from './Topbar';
+import { Topbar } from './Topbar';
 
 const COLLAPSE_KEY = 'efms.sidebar.collapsed';
 
@@ -48,7 +48,6 @@ export function AppShell() {
 
       <div className={cn('flex min-h-screen flex-col transition-[padding] duration-200', collapsed ? 'lg:pl-16' : 'lg:pl-64')}>
         <Topbar onOpenMobileNav={() => setMobileOpen(true)} />
-        <DemoDataBanner />
 
         <main className="min-w-0 flex-1 px-3 py-4 sm:px-4 sm:py-5 lg:px-6">
           <div className="mx-auto w-full max-w-[100rem]">
@@ -59,7 +58,7 @@ export function AppShell() {
         <footer className="border-ink-200 text-ink-500 no-print border-t px-4 py-4 text-[11px]">
           <div className="mx-auto flex max-w-[100rem] flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <p>EFMS · Employer Filtering Management System.</p>
-            <p>Sample data only. Records are stored in your Supabase database.</p>
+            <p>Records are stored in your Supabase database.</p>
           </div>
         </footer>
       </div>

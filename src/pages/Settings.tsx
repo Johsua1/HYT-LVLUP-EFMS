@@ -73,7 +73,7 @@ export default function SettingsPage() {
   const handleExportJson = () => {
     const payload = {
       exportedAt: new Date().toISOString(),
-      note: 'EFMS data export — fictional sample data.',
+      note: 'EFMS data export.',
       settings,
       employers,
       jobs,
@@ -404,14 +404,6 @@ export default function SettingsPage() {
             >
               Restore default preferences
             </Button>
-          </div>
-
-          <div className="border-amber-200 bg-amber-50 mt-4 rounded-lg border px-3.5 py-3">
-            <p className="text-amber-800 text-[12px] font-semibold">Sample data notice</p>
-            <p className="text-amber-800 mt-1 text-[11px] leading-relaxed">
-              Every employer, contact, fee and contract seeded into this application is fictional and was authored for
-              demonstration. No real company, person or bank detail is represented.
-            </p>
           </div>
         </Card>
 
