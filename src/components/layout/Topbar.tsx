@@ -87,6 +87,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
         <Popover
           align="end"
           width={360}
+          mobileFull
           trigger={({ open, toggle, ref }) => (
             <button
               ref={ref}
@@ -109,7 +110,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
           )}
         >
           {({ close }) => (
-            <div className="flex max-h-[26rem] flex-col">
+            <div className="flex max-h-[calc(100dvh-4.75rem)] flex-col sm:max-h-[26rem]">
               <div className="border-ink-200 flex items-center justify-between gap-2 border-b px-3 py-2.5">
                 <div>
                   <p className="text-ink-900 text-[13px] font-semibold">Notifications</p>
@@ -128,7 +129,7 @@ export function Topbar({ onOpenMobileNav }: TopbarProps) {
                 </button>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                 {recent.length === 0 && (
                   <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
                     <BellOff className="text-ink-300 h-6 w-6" />
