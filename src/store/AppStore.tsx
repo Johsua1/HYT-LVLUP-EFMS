@@ -49,7 +49,8 @@ import { MAX_COMPARISON } from '@/types';
 import { addMonths, dateOnly, isoOffset, uid } from '@/lib/utils';
 import { applyTheme } from '@/lib/theme';
 import { useAuth } from '@/auth/AuthProvider';
-import { DOCUMENTS_BUCKET, ALLOWED_DOCUMENT_MIME, MAX_DOCUMENT_BYTES, describeError, supabase } from '@/lib/supabase';
+import { DOCUMENTS_BUCKET, describeError, supabase } from '@/lib/supabase';
+import { sanitizeStorageFileName, validateDocumentFile } from '@/lib/security';
 import {
   activityFromRow,
   contractFromRow,
@@ -1697,13 +1698,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   /* ---------------------------------------------------------------- */
 
   const validateFile = useCallback(
-    (file: File): string | null => {
-      if (file.size > MAX_DOCUMENT_BYTES) return 'That file is larger than the 10 MB limit.';
-      if (file.type && !(ALLOWED_DOCUMENT_MIME as readonly string[]).includes(file.type)) {
-        return 'That file type is not allowed. Use PDF, Word, Excel or an image.';
-      }
-      return null;
-    },
+    (file: File): string | null => validateDocumentFile({ name: file.name, size: file.size, type: file.type }),
     [],
   );
 
@@ -1711,7 +1706,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     async (employerId: string, file: File): Promise<{ path: string | null; error: string | null }> => {
       const invalid = validateFile(file);
       if (invalid) return { path: null, error: invalid };
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+      const safeName = sanitizeStorageFileName(file.name);
       const path = `employers/${employerId}/${crypto.randomUUID()}-${safeName}`;
       const { error: err } = await supabase.storage.from(DOCUMENTS_BUCKET).upload(path, file, {
         cacheControl: '3600',

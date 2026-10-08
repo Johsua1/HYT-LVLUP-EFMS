@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { sanitizeBackendMessage } from '@/lib/security';
 
 /**
  * Single shared Supabase client.
@@ -49,24 +50,15 @@ export async function createDocumentSignedUrl(
   return { url: data?.signedUrl ?? null, error: null };
 }
 
-/** Max upload size in bytes — mirrors the bucket limit set in the migration. */
-export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
-
-/** MIME types accepted by the bucket and the upload form. */
-export const ALLOWED_DOCUMENT_MIME = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-] as const;
+/* Upload limits and the error-message sanitiser live in `@/lib/security` so
+   they can be unit-tested without pulling in the Supabase client. Re-exported
+   here for the existing import sites. */
+export { MAX_DOCUMENT_BYTES, ALLOWED_DOCUMENT_MIME } from '@/lib/security';
 
 /**
  * Turns a Supabase/PostgREST error into a message that is useful to a person
- * without leaking schema or policy internals.
+ * without leaking schema, SQL or policy internals. The real message is kept in
+ * the browser console for debugging, but never shown in the UI.
  */
 export function describeError(error: unknown): string {
   if (!error) return 'Something went wrong.';
@@ -77,19 +69,12 @@ export function describeError(error: unknown): string {
         ? (error as { message: string }).message
         : 'Unexpected error.';
 
-  if (/row-level security|permission denied|violates row-level/i.test(message)) {
-    return 'You do not have permission to perform that action.';
+  const safe = sanitizeBackendMessage(message);
+  if (safe !== message) {
+    // Keep the original for developers without exposing it to the user.
+    console.warn('[efms] suppressed backend error detail:', message);
   }
-  if (/duplicate key value/i.test(message)) {
-    return 'A record with those details already exists.';
-  }
-  if (/foreign key/i.test(message)) {
-    return 'That record is still referenced by other data and cannot be changed.';
-  }
-  if (/Failed to fetch|NetworkError|Load failed/i.test(message)) {
-    return 'Network error — check your connection and try again.';
-  }
-  return message;
+  return safe;
 }
 
 /** Where Supabase sends users after an invite or password-recovery email. */

@@ -16,6 +16,7 @@ import {
 import { useAuth } from '@/auth/AuthProvider';
 import { useAppStore } from '@/store/AppStore';
 import { describeError, invokeAdminStaff, supabase } from '@/lib/supabase';
+import { passwordProblem } from '@/lib/security';
 import type { ProfileRow, ProfileStatus } from '@/lib/database.types';
 import { dateOnly } from '@/lib/utils';
 import { Card, CardHeader } from '@/components/ui/Card';
@@ -155,9 +156,12 @@ export function StaffManager() {
       setFormError('Enter a valid email address.');
       return;
     }
-    if (!editing && draft.tempPassword.length < 8) {
-      setFormError('The temporary password must be at least 8 characters.');
-      return;
+    if (!editing) {
+      const problem = passwordProblem(draft.tempPassword);
+      if (problem) {
+        setFormError(problem);
+        return;
+      }
     }
 
     setSaving(true);

@@ -5,6 +5,7 @@ import { AuthFrame, Notice } from '@/components/auth/AuthFrame';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { passwordProblem } from '@/lib/security';
 
 type Mode = 'signin' | 'forgot' | 'reset';
 
@@ -45,9 +46,12 @@ export default function AuthPage() {
       setError('The two passwords do not match.');
       return;
     }
-    if (activeMode === 'reset' && password.length < 8) {
-      setError('Choose a password of at least 8 characters.');
-      return;
+    if (activeMode === 'reset') {
+      const problem = passwordProblem(password);
+      if (problem) {
+        setError(problem);
+        return;
+      }
     }
 
     setBusy(true);

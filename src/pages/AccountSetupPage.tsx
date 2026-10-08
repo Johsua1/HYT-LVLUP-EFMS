@@ -5,6 +5,7 @@ import { AuthFrame, Notice } from '@/components/auth/AuthFrame';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
+import { passwordProblem } from '@/lib/security';
 
 /**
  * First-run password change for invited staff.
@@ -24,8 +25,9 @@ export default function AccountSetupPage() {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (password.length < 8) {
-      setError('Choose a password of at least 8 characters.');
+    const problem = passwordProblem(password);
+    if (problem) {
+      setError(problem);
       return;
     }
     if (password !== confirm) {

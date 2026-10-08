@@ -13,7 +13,7 @@
     "sb:link": "supabase link --project-ref msaczgyoxjywhojcfgpx",
     "sb:config": "supabase config push",
     "sb:smtp": "node scripts/configure-smtp.mjs",
-    "sb:db:push": "supabase db push",
+    "sb:db:push": "node scripts/db-push.mjs",
     "sb:reseed": "node scripts/reseed.mjs",
     "sb:functions:deploy": "node scripts/deploy-functions.mjs",
     "sb:start": "supabase start",
@@ -25,7 +25,8 @@
     "test:employer": "esbuild scripts/test-employer-edit-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-employer-edit-flow.mjs && node scripts/.tmp-employer-edit-flow.mjs",
     "test:document": "esbuild scripts/test-document-flow.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-document-flow.mjs && node scripts/.tmp-document-flow.mjs",
     "test:guard": "esbuild scripts/test-inspect-guard.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-inspect-guard.mjs && node scripts/.tmp-inspect-guard.mjs",
-    "test:flows": "npm run test:contract && npm run test:verification && npm run test:renewal && npm run test:employer && npm run test:document && npm run test:guard"
+    "test:security": "esbuild scripts/test-security.ts --bundle --platform=node --format=esm --outfile=scripts/.tmp-security.mjs && node scripts/.tmp-security.mjs",
+    "test:flows": "npm run test:contract && npm run test:verification && npm run test:renewal && npm run test:employer && npm run test:document && npm run test:guard && npm run test:security"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
