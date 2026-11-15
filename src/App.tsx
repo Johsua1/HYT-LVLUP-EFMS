@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import AuthPage, { SupabaseSetupPage } from '@/pages/AuthPage';
+import LandingPage from '@/pages/LandingPage';
 import MfaPage from '@/pages/MfaPage';
 import AccountSetupPage from '@/pages/AccountSetupPage';
 import DisabledPage from '@/pages/DisabledPage';
@@ -89,6 +90,9 @@ function AuthenticatedApp() {
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/" element={<LandingRedirect />} />
+          {/* A signed-in user who follows a public "Sign in" link should land
+              back in the workspace rather than on a not-found screen. */}
+          <Route path="/login" element={<LandingRedirect />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/employers" element={<EmployersPage />} />
           <Route path="/employers/:employerId" element={<EmployerDetailsPage />} />
@@ -158,9 +162,22 @@ export default function AppRoutes() {
     );
   }
 
-  /* No session (or a password-recovery link that still needs a new password):
-     the only thing an unauthenticated visitor sees is the sign-in screen. */
-  if (!session || recoveryMode) return <AuthPage />;
+  /* A password-recovery link always goes to the password screen, whatever
+     route the email returned to. */
+  if (recoveryMode) return <AuthPage />;
+
+  /* Signed-out visitors get the public site: the landing page at `/`, the
+     real sign-in screen at `/login`, and a redirect home for anything else.
+     The dashboard and every module stay behind the session gate below. */
+  if (!session) {
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<AuthPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    );
+  }
 
   /* A session exists but its profile has not resolved — never render the app
      on a session we cannot yet authorise. */

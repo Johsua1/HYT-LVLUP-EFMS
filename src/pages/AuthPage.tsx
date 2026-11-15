@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, KeyRound, LogIn, Mail } from 'lucide-react';
 import { useAuth } from '@/auth/AuthProvider';
 import { AuthFrame, Notice } from '@/components/auth/AuthFrame';
@@ -85,6 +86,14 @@ export default function AuthPage() {
 
   return (
     <AuthFrame>
+      {activeMode !== 'reset' && (
+        <Link
+          to="/"
+          className="text-ink-500 hover:text-ink-800 mb-3 inline-flex items-center gap-1 text-xs font-medium"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to overview
+        </Link>
+      )}
       <Card className="p-5 sm:p-6">
         {activeMode === 'reset' && (
           <div className="mb-4 flex items-center gap-2">
