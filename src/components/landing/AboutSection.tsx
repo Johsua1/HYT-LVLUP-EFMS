@@ -45,7 +45,7 @@ export function AboutSection() {
             title={
               <>
                 Everything you need to evaluate{' '}
-                <span className="lp-display text-[1.06em] text-[#044aa9] italic">overseas employers.</span>
+                <span className="text-[#0a7f4a]">overseas employers.</span>
               </>
             }
             description="Managing international employer information can be complicated. This platform brings essential employer details into one organized workspace, making it easier to discover opportunities, review requirements, compare costs, and evaluate employment conditions."
@@ -57,7 +57,13 @@ export function AboutSection() {
               return (
                 <Reveal key={item.title} delay={180 + index * 70}>
                   <div className="flex gap-3.5">
-                    <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#eef5fe] text-[#044aa9] ring-1 ring-[#d9e8fd]">
+                    <span
+                      className={
+                        index % 2 === 0
+                          ? 'mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#eef5fe] text-[#044aa9] ring-1 ring-[#d9e8fd]'
+                          : 'mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#effdf7] text-[#0a7f4a] ring-1 ring-[#b3f0d4]'
+                      }
+                    >
                       <Icon className="h-[17px] w-[17px]" aria-hidden />
                     </span>
                     <div>
@@ -88,16 +94,17 @@ export function AboutSection() {
             className="lp-dotgrid pointer-events-none absolute -inset-x-8 -inset-y-10 -z-10 opacity-50 [mask-image:radial-gradient(65%_60%_at_50%_45%,#000,transparent)]"
             aria-hidden
           />
-          <div className="pointer-events-none absolute -top-10 -right-6 -z-10 h-44 w-44 rounded-full bg-[#044aa9]/10 blur-3xl" aria-hidden />
+          <div className="pointer-events-none absolute -top-10 -right-6 -z-10 h-44 w-44 rounded-full bg-[#0a7f4a]/10 blur-3xl" aria-hidden />
 
-          <div className="relative mx-auto max-w-[540px] rounded-2xl border border-[#e2e8f1] bg-white shadow-[0_40px_90px_-48px_rgba(10,19,34,0.55)]">
-            <div className="flex items-center gap-2 border-b border-[#e2e8f1] px-4 py-3">
+          <div className="relative mx-auto max-w-[540px] overflow-hidden rounded-2xl border border-[#e5eaf0] bg-white shadow-[0_40px_90px_-48px_rgba(8,11,16,0.55)]">
+            <div className="lp-brand-rule absolute inset-x-0 top-0 rounded-none" aria-hidden />
+            <div className="flex items-center gap-2 border-b border-[#e5eaf0] px-4 py-3">
               <span className="flex gap-1.5" aria-hidden>
-                <span className="h-2 w-2 rounded-full bg-[#e2e8f1]" />
-                <span className="h-2 w-2 rounded-full bg-[#e2e8f1]" />
-                <span className="h-2 w-2 rounded-full bg-[#e2e8f1]" />
+                <span className="h-2 w-2 rounded-full bg-[#e5eaf0]" />
+                <span className="h-2 w-2 rounded-full bg-[#e5eaf0]" />
+                <span className="h-2 w-2 rounded-full bg-[#e5eaf0]" />
               </span>
-              <span className="text-lp-muted ml-2 rounded-md bg-[#f5f7fb] px-2 py-1 text-[9.5px]">
+              <span className="text-lp-muted ml-2 rounded-md bg-[#f5f7fa] px-2 py-1 text-[9.5px]">
                 efms / employer-record
               </span>
               <span className="ml-auto">
@@ -125,7 +132,7 @@ export function AboutSection() {
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-lg border border-[#e2e8f1] p-3">
+                <div className="rounded-lg border border-[#e5eaf0] p-3">
                   <p className="text-lp-muted flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
                     <ReceiptText className="h-3 w-3" aria-hidden />
                     Fee breakdown
@@ -144,7 +151,7 @@ export function AboutSection() {
                   </div>
                 </div>
 
-                <div className="rounded-lg border border-[#e2e8f1] p-3">
+                <div className="rounded-lg border border-[#e5eaf0] p-3">
                   <p className="text-lp-muted flex items-center gap-1.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
                     <ListChecks className="h-3 w-3" aria-hidden />
                     Requirements

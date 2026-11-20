@@ -12,14 +12,14 @@ export function WhySection() {
             title={
               <>
                 Less scattered.{' '}
-                <span className="lp-display text-[1.06em] text-[#0a7f4a] italic">More informed.</span>
+                <span className="text-[#0a7f4a]">More informed.</span>
               </>
             }
             description="Employer evaluation breaks down when the information lives in different files, messages and spreadsheets. EFMS keeps the whole picture in one place so decisions are made on evidence, not memory."
           />
 
           <Reveal delay={180}>
-            <div className="mt-8 rounded-xl border border-[#e2e8f1] bg-[#f8fafd] p-5">
+            <div className="mt-8 rounded-2xl border border-[#e5eaf0] bg-[#f8fafd] p-5">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-white text-[#044aa9] ring-1 ring-[#d9e8fd]">
                 <Layers className="h-[17px] w-[17px]" aria-hidden />
               </span>
@@ -29,14 +29,14 @@ export function WhySection() {
               <p className="text-lp-muted mt-1.5 text-[11.5px] leading-relaxed">
                 No re-entering details, no mismatched versions, no guessing which spreadsheet is current.
               </p>
-              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#e2e8f1] pt-4">
+              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[#e5eaf0] pt-4">
                 {[
                   { value: '10', label: 'Sample employers' },
                   { value: '7', label: 'Fee categories' },
                   { value: '12', label: 'Industries' },
                 ].map((item) => (
                   <div key={item.label}>
-                    <p className="text-lp-ink text-[18px] leading-none font-semibold tracking-[-0.03em]">{item.value}</p>
+                    <p className="text-lp-ink font-display text-[19px] leading-none font-bold tracking-[-0.03em]">{item.value}</p>
                     <p className="text-lp-muted mt-1 text-[9.5px] leading-tight">{item.label}</p>
                   </div>
                 ))}
@@ -61,8 +61,14 @@ export function WhySection() {
             const Icon = benefit.icon;
             return (
               <Reveal key={benefit.title} delay={index * 55} className="h-full">
-                <div className="group flex h-full gap-3 rounded-xl border border-[#e2e8f1] bg-white p-4 transition-colors duration-300 hover:border-[#044aa9]/25 hover:bg-[#f8fafd]">
-                  <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eef5fe] text-[#044aa9] ring-1 ring-[#d9e8fd] transition-transform duration-300 group-hover:-translate-y-0.5">
+                <div className="group flex h-full gap-3 rounded-2xl border border-[#e5eaf0] bg-white p-4 transition-[border-color,background-color] duration-300 hover:border-[#044aa9]/25 hover:bg-[#f8fafd]">
+                  <span
+                    className={
+                      index % 2 === 0
+                        ? 'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#eef5fe] text-[#044aa9] ring-1 ring-[#d9e8fd] transition-transform duration-300 group-hover:-translate-y-0.5'
+                        : 'mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#effdf7] text-[#0a7f4a] ring-1 ring-[#b3f0d4] transition-transform duration-300 group-hover:-translate-y-0.5'
+                    }
+                  >
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                   <div className="flex min-w-0 flex-1 flex-col">
@@ -73,7 +79,7 @@ export function WhySection() {
                         {['One record', 'Admin + staff', 'Status tracked'].map((tag) => (
                           <span
                             key={tag}
-                            className="rounded-md bg-[#f1f5fb] px-1.5 py-1 text-[9px] font-medium text-[#586a82]"
+                            className="rounded-md bg-[#f1f5fb] px-1.5 py-1 text-[9px] font-medium text-[#64748b]"
                           >
                             {tag}
                           </span>
@@ -87,9 +93,9 @@ export function WhySection() {
           })}
 
           <Reveal delay={420} className="h-full">
-            <div className="relative flex h-full flex-col justify-between overflow-hidden rounded-xl bg-[#050b18] p-4 text-white">
+            <div className="lp-dark-tile relative flex h-full flex-col justify-between overflow-hidden rounded-2xl p-4 text-white">
               <div
-                className="pointer-events-none absolute -top-10 -right-8 h-32 w-32 rounded-full bg-[#0a7f4a]/30 blur-3xl"
+                className="pointer-events-none absolute -top-10 -right-8 h-32 w-32 rounded-full bg-[#0a7f4a]/35 blur-3xl"
                 aria-hidden
               />
               <div className="relative">

@@ -12,7 +12,7 @@ export function CountriesSection() {
             title={
               <>
                 International employers, one{' '}
-                <span className="lp-display text-[1.06em] text-[#0a7f4a] italic">standard of review.</span>
+                <span className="text-[#0a7f4a]">standard of review.</span>
               </>
             }
             description="Filter by destination and compare opportunities across ten countries in the sample dataset. Each card shows the industries and sample roles represented in that market."
@@ -28,7 +28,7 @@ export function CountriesSection() {
         <div className="mt-12 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
           {LANDING_COUNTRIES.map((country, index) => (
             <Reveal key={country.code} delay={index * 55} className="h-full">
-              <article className="lp-country flex h-full flex-col rounded-xl border border-[#e2e8f1] bg-white p-5">
+              <article className="lp-country flex h-full flex-col rounded-2xl border border-[#e5eaf0] bg-white p-5">
                 <div className="flex items-start justify-between gap-3">
                   <Flag code={country.code} className="lp-country-flag h-9 w-[52px]" />
                   <ArrowUpRight className="lp-country-arrow mt-1 h-4 w-4 text-[#044aa9]" aria-hidden />
@@ -41,7 +41,7 @@ export function CountriesSection() {
                   {country.industries.map((industry) => (
                     <span
                       key={industry}
-                      className="rounded-full bg-[#f1f5fb] px-2 py-0.5 text-[9.5px] font-medium text-[#586a82] ring-1 ring-[#e2e8f1]"
+                      className="rounded-full bg-[#f1f5fb] px-2 py-0.5 text-[9.5px] font-medium text-[#64748b] ring-1 ring-[#e5eaf0]"
                     >
                       {industry}
                     </span>
@@ -57,9 +57,13 @@ export function CountriesSection() {
           ))}
 
           <Reveal delay={420} className="h-full">
-            <div className="relative flex h-full flex-col justify-between overflow-hidden rounded-xl bg-[#050b18] p-5 text-white">
+            <div className="lp-dark-tile relative flex h-full flex-col justify-between overflow-hidden rounded-2xl p-5 text-white">
               <div
-                className="pointer-events-none absolute -top-12 -right-10 h-44 w-44 rounded-full bg-[#2f7bf0]/25 blur-3xl"
+                className="pointer-events-none absolute -top-12 -right-10 h-44 w-44 rounded-full bg-[#0b65d8]/30 blur-3xl"
+                aria-hidden
+              />
+              <div
+                className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 rounded-full bg-[#0a7f4a]/30 blur-3xl"
                 aria-hidden
               />
               <div className="relative">
@@ -79,7 +83,7 @@ export function CountriesSection() {
                 </div>
               </div>
               <div className="relative mt-6">
-                <p className="text-[30px] leading-none font-semibold tracking-[-0.045em]">10</p>
+                <p className="font-display text-[34px] leading-none font-bold tracking-[-0.045em]">10</p>
                 <p className="mt-1 text-[10.5px] leading-relaxed text-white/55">
                   destinations in the sample dataset, each with its own industry and role mix.
                 </p>

@@ -23,8 +23,8 @@ const FEE_MAX = 40000;
 function FilterLabel({ children, value }: { children: ReactNode; value?: string }) {
   return (
     <div className="flex items-baseline justify-between gap-2">
-      <span className="text-[9.5px] font-semibold tracking-[0.14em] text-[#586a82] uppercase">{children}</span>
-      {value ? <span className="text-[10.5px] font-semibold text-[#0a1322] tabular-nums">{value}</span> : null}
+      <span className="text-[9.5px] font-semibold tracking-[0.14em] text-[#64748b] uppercase">{children}</span>
+      {value ? <span className="text-[10.5px] font-semibold text-[#17212f] tabular-nums">{value}</span> : null}
     </div>
   );
 }
@@ -44,11 +44,11 @@ function Select({
 }) {
   return (
     <label className="block">
-      <span className="text-[9.5px] font-semibold tracking-[0.14em] text-[#586a82] uppercase">{label}</span>
+      <span className="text-[9.5px] font-semibold tracking-[0.14em] text-[#64748b] uppercase">{label}</span>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="lp-select mt-1.5 h-9 w-full rounded-lg border border-[#e2e8f1] bg-white pl-2.5 text-[11.5px] text-[#0a1322] outline-none transition-colors focus:border-[#044aa9] focus:ring-2 focus:ring-[#044aa9]/12"
+        className="lp-select mt-1.5 h-9 w-full rounded-lg border border-[#e5eaf0] bg-white pl-2.5 text-[11.5px] text-[#17212f] outline-none transition-colors focus:border-[#044aa9] focus:ring-2 focus:ring-[#044aa9]/12"
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (
@@ -125,19 +125,20 @@ export function FilterPreview() {
           title={
             <>
               Your criteria. Your search.{' '}
-              <span className="lp-display text-[1.06em] text-[#044aa9] italic">Better comparisons.</span>
+              <span className="text-[#044aa9]">Better comparisons.</span>
             </>
           }
           description="This is a working preview of the filtering workspace. Change a filter and the sample results update immediately — the same logic the full system applies to real employer records."
         />
 
         <Reveal delay={120} className="mt-10">
-          <div className="overflow-hidden rounded-2xl border border-[#dde5f0] bg-white shadow-[0_40px_90px_-55px_rgba(10,19,34,0.5)]">
+          <div className="relative overflow-hidden rounded-2xl border border-[#dde5f0] bg-white shadow-[0_40px_90px_-55px_rgba(8,11,16,0.5)]">
+            <div className="lp-brand-rule absolute inset-x-0 top-0 z-10 rounded-none" aria-hidden />
             <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
               {/* Filters -------------------------------------------- */}
-              <div className="min-w-0 border-b border-[#e2e8f1] bg-[#f8fafd] p-4 sm:p-5 lg:border-r lg:border-b-0">
+              <div className="min-w-0 border-b border-[#e5eaf0] bg-[#f8fafd] p-4 sm:p-5 lg:border-r lg:border-b-0">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#0a1322]">
+                  <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#17212f]">
                     <SlidersHorizontal className="h-3.5 w-3.5 text-[#044aa9]" aria-hidden />
                     Filters
                     {activeCount > 0 ? (
@@ -169,7 +170,7 @@ export function FilterPreview() {
                             'col-span-2 rounded-md px-2 py-1.5 text-left text-[10px] font-medium transition-colors',
                             country === null
                               ? 'bg-[#044aa9] text-white'
-                              : 'bg-white text-[#586a82] ring-1 ring-[#e2e8f1] hover:bg-[#eef5fe]',
+                              : 'bg-white text-[#64748b] ring-1 ring-[#e5eaf0] hover:bg-[#eef5fe]',
                           )}
                         >
                           All countries
@@ -187,7 +188,7 @@ export function FilterPreview() {
                                 'flex items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-[9.5px] font-medium transition-colors',
                                 selected
                                   ? 'bg-[#044aa9] text-white'
-                                  : 'bg-white text-[#586a82] ring-1 ring-[#e2e8f1] hover:bg-[#eef5fe]',
+                                  : 'bg-white text-[#64748b] ring-1 ring-[#e5eaf0] hover:bg-[#eef5fe]',
                               )}
                             >
                               <Flag code={code} className="h-3.5 w-5" />
@@ -268,7 +269,7 @@ export function FilterPreview() {
                               'rounded-md px-1 py-1.5 text-[9.5px] font-medium transition-colors',
                               duration === option.value
                                 ? 'bg-[#044aa9] text-white'
-                                : 'bg-white text-[#586a82] ring-1 ring-[#e2e8f1] hover:bg-[#eef5fe]',
+                                : 'bg-white text-[#64748b] ring-1 ring-[#e5eaf0] hover:bg-[#eef5fe]',
                             )}
                           >
                             {option.label}
@@ -283,9 +284,9 @@ export function FilterPreview() {
                     role="switch"
                     aria-checked={housingOnly}
                     onClick={() => setHousingOnly((value) => !value)}
-                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#e2e8f1] bg-white px-2.5 py-2 text-left"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-[#e5eaf0] bg-white px-2.5 py-2 text-left"
                   >
-                    <span className="text-[10px] font-medium text-[#586a82]">Housing provided only</span>
+                    <span className="text-[10px] font-medium text-[#64748b]">Housing provided only</span>
                     <span
                       className={cn(
                         'relative h-5 w-9 shrink-0 rounded-full transition-colors',
@@ -315,7 +316,7 @@ export function FilterPreview() {
                             'rounded-md px-1 py-1.5 text-[9.5px] font-medium transition-colors',
                             status === option
                               ? 'bg-[#044aa9] text-white'
-                              : 'bg-white text-[#586a82] ring-1 ring-[#e2e8f1] hover:bg-[#eef5fe]',
+                              : 'bg-white text-[#64748b] ring-1 ring-[#e5eaf0] hover:bg-[#eef5fe]',
                           )}
                         >
                           {option}
@@ -329,8 +330,8 @@ export function FilterPreview() {
               {/* Results -------------------------------------------- */}
               <div className="min-w-0 p-4 sm:p-5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11.5px] text-[#586a82]" aria-live="polite">
-                    <span className="font-semibold text-[#0a1322] tabular-nums">{results.length}</span>{' '}
+                  <p className="text-[11.5px] text-[#64748b]" aria-live="polite">
+                    <span className="font-semibold text-[#17212f] tabular-nums">{results.length}</span>{' '}
                     {results.length === 1 ? 'sample employer' : 'sample employers'} match
                   </p>
                   <div className="flex items-center gap-2">
@@ -344,7 +345,7 @@ export function FilterPreview() {
                     {results.map((employer, index) => (
                       <article
                         key={`${employer.id}-${signature}`}
-                        className="lp-result flex flex-col rounded-xl border border-[#e2e8f1] bg-white p-4 transition-colors hover:border-[#044aa9]/30"
+                        className="lp-result flex flex-col rounded-xl border border-[#e5eaf0] bg-white p-4 transition-colors hover:border-[#044aa9]/30"
                         style={{ animationDelay: `${index * 45}ms` }}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -414,7 +415,7 @@ export function FilterPreview() {
                             )}
                             {employer.verification}
                           </span>
-                          <span className="rounded-full bg-[#f1f5fb] px-1.5 py-0.5 text-[8.5px] font-medium text-[#586a82] ring-1 ring-[#e2e8f1]">
+                          <span className="rounded-full bg-[#f1f5fb] px-1.5 py-0.5 text-[8.5px] font-medium text-[#64748b] ring-1 ring-[#e5eaf0]">
                             {employer.status}
                           </span>
                         </div>
@@ -423,7 +424,7 @@ export function FilterPreview() {
                   </div>
                 ) : (
                   <div className="mt-3 flex flex-col items-center justify-center rounded-xl border border-dashed border-[#d7e0ec] bg-[#f8fafd] px-6 py-14 text-center">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#64748b] ring-1 ring-[#e2e8f1]">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-[#64748b] ring-1 ring-[#e5eaf0]">
                       <Search className="h-4 w-4" aria-hidden />
                     </span>
                     <p className="text-lp-ink mt-3 text-[13px] font-semibold">No sample employers match these filters.</p>
@@ -446,7 +447,7 @@ export function FilterPreview() {
         </Reveal>
 
         <Reveal delay={160}>
-          <div className="mt-6 flex flex-col items-start justify-between gap-4 rounded-xl bg-[#050b18] px-5 py-5 text-white sm:flex-row sm:items-center sm:px-6">
+          <div className="mt-6 flex flex-col items-start justify-between gap-4 rounded-xl bg-[#080b10] px-5 py-5 text-white sm:flex-row sm:items-center sm:px-6">
             <div>
               <p className="text-[13px] font-semibold">Explore employer filtering in the full workspace.</p>
               <p className="mt-1 text-[11px] leading-relaxed text-white/50">
@@ -455,7 +456,7 @@ export function FilterPreview() {
             </div>
             <Link
               to="/login"
-              className="lp-cta-primary inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 text-[12px] font-semibold text-[#0a1322] transition-colors hover:bg-[#e9eff8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="lp-cta-primary inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-white px-4 text-[12px] font-semibold text-[#17212f] transition-colors hover:bg-[#e9eff8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
               Explore employer filtering
               <ArrowRight className="h-3.5 w-3.5" aria-hidden />

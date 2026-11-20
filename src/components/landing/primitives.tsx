@@ -137,8 +137,8 @@ export function SampleTag({ tone = 'light', className }: { tone?: 'light' | 'dar
       className={cn(
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold tracking-wide uppercase',
         tone === 'light'
-          ? 'bg-[#eef2f8] text-[#5a6b82] ring-1 ring-[#e2e8f1]'
-          : 'bg-white/8 text-white/60 ring-1 ring-white/12',
+          ? 'bg-[#f1f5f9] text-[#64748b] ring-1 ring-[#e5eaf0]'
+          : 'bg-white/[0.07] text-white/65 ring-1 ring-white/12',
         className,
       )}
     >
@@ -177,12 +177,14 @@ export function SectionHeading({
       <Reveal>
         <span
           className={cn(
-            'lp-eyebrow',
-            tone === 'light' ? 'text-[#044aa9]' : 'text-[#7fb2ff]',
+            'lp-eyebrow rounded-full border px-3 py-1',
+            tone === 'light'
+              ? 'border-[#d9e8fd] bg-[#eef5fe] text-[#044aa9]'
+              : 'border-white/12 bg-white/[0.06] text-[#9cc6ff]',
           )}
         >
           <span
-            className={cn('h-px w-6', tone === 'light' ? 'bg-[#044aa9]/40' : 'bg-[#7fb2ff]/50')}
+            className={cn('h-1.5 w-1.5 rounded-full', tone === 'light' ? 'bg-[#0a7f4a]' : 'bg-[#33d68c]')}
             aria-hidden
           />
           {eyebrow}
@@ -191,8 +193,8 @@ export function SectionHeading({
       <Reveal delay={70}>
         <h2
           className={cn(
-            'mt-4 max-w-3xl text-[clamp(1.85rem,4vw,3rem)] leading-[1.08] font-semibold tracking-[-0.03em]',
-            tone === 'light' ? 'text-[#0a1322]' : 'text-white',
+            'mt-4 max-w-3xl text-[clamp(1.9rem,3.8vw,2.9rem)] leading-[1.1] font-bold tracking-[-0.035em]',
+            tone === 'light' ? 'text-[#17212f]' : 'text-white',
           )}
         >
           {title}
@@ -202,8 +204,8 @@ export function SectionHeading({
         <Reveal delay={130}>
           <p
             className={cn(
-              'mt-4 max-w-2xl text-[15px] leading-relaxed',
-              tone === 'light' ? 'text-[#586a82]' : 'text-white/62',
+              'mt-4 max-w-2xl text-[15px] leading-[1.7] sm:text-[15.5px]',
+              tone === 'light' ? 'text-[#64748b]' : 'text-white/65',
             )}
           >
             {description}
@@ -378,7 +380,7 @@ export function Flag({
   return (
     <span
       className={cn(
-        'inline-block shrink-0 overflow-hidden rounded-[4px] ring-1 ring-[#0a1322]/10',
+        'inline-block shrink-0 overflow-hidden rounded-[4px] ring-1 ring-[#17212f]/10',
         className,
       )}
     >

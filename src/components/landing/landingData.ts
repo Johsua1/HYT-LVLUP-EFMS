@@ -298,7 +298,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: SlidersHorizontal,
     span: 'wide',
     visual: 'filter',
-    glow: 'rgb(47 123 240 / 0.2)',
+    glow: 'rgb(11 101 216 / 0.2)',
   },
   {
     key: 'directory',
@@ -316,7 +316,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: Columns3,
     span: 'standard',
     visual: 'compare',
-    glow: 'rgb(47 123 240 / 0.16)',
+    glow: 'rgb(11 101 216 / 0.16)',
   },
   {
     key: 'fees',
@@ -334,7 +334,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: FileSignature,
     span: 'standard',
     visual: 'contract',
-    glow: 'rgb(245 158 11 / 0.16)',
+    glow: 'rgb(11 101 216 / 0.16)',
   },
   {
     key: 'requirements',
@@ -343,7 +343,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: ListChecks,
     span: 'standard',
     visual: 'requirements',
-    glow: 'rgb(47 123 240 / 0.16)',
+    glow: 'rgb(11 101 216 / 0.16)',
   },
   {
     key: 'verification',
@@ -362,7 +362,7 @@ export const LANDING_FEATURES: LandingFeature[] = [
     icon: BarChart3,
     span: 'wide',
     visual: 'reports',
-    glow: 'rgb(47 123 240 / 0.18)',
+    glow: 'rgb(11 101 216 / 0.18)',
   },
 ];
 

@@ -15,6 +15,16 @@
   overflow-x: clip;
 }
 
+/* One corporate type system: Plus Jakarta Sans for every heading, Inter for
+   body copy. No serif, script or decorative family is used anywhere. */
+.lp-page h1,
+.lp-page h2,
+.lp-page h3,
+.lp-page h4 {
+  font-family: var(--font-display);
+  font-feature-settings: 'ss01' on;
+}
+
 .lp-page ::selection {
   background: #cfe3ff;
   color: #072854;
@@ -26,8 +36,17 @@
 
 .lp-display {
   font-family: var(--font-display);
-  font-weight: 400;
-  letter-spacing: -0.01em;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+
+/* The supplied logo keeps its original inks and proportions. On dark
+   surfaces a hairline light halo lifts the deep royal blue off the
+   background without adding a plate or recolouring the artwork. */
+.lp-logo-on-dark {
+  filter:
+    drop-shadow(0 0 0.6px rgb(255 255 255 / 0.95))
+    drop-shadow(0 0 1.4px rgb(255 255 255 / 0.55));
 }
 
 .lp-eyebrow {
@@ -53,9 +72,9 @@
   position: relative;
   isolation: isolate;
   background:
-    radial-gradient(1100px 640px at 82% 8%, rgb(47 123 240 / 0.22), transparent 62%),
-    radial-gradient(900px 620px at 4% 92%, rgb(10 127 74 / 0.2), transparent 62%),
-    linear-gradient(180deg, #050b18 0%, #061020 52%, #050b18 100%);
+    radial-gradient(1100px 640px at 84% 6%, rgb(11 101 216 / 0.3), transparent 62%),
+    radial-gradient(880px 600px at 2% 96%, rgb(0 155 99 / 0.2), transparent 62%),
+    linear-gradient(180deg, #080b10 0%, #0a1220 54%, #080b10 100%);
   color: #fff;
 }
 
@@ -97,7 +116,7 @@
   height: 34rem;
   top: -8rem;
   right: 6%;
-  background: rgb(47 123 240 / 0.3);
+  background: rgb(11 101 216 / 0.34);
 }
 
 .lp-hero-glow--mint {
@@ -105,7 +124,7 @@
   height: 26rem;
   bottom: -10rem;
   left: -4rem;
-  background: rgb(51 214 140 / 0.18);
+  background: rgb(0 155 99 / 0.22);
   animation-delay: -7s;
 }
 
@@ -140,11 +159,26 @@
   right: -10rem;
   top: 2rem;
   border-radius: 50%;
-  background: conic-gradient(from 210deg, transparent 0deg, rgb(47 123 240 / 0.18) 70deg, transparent 140deg);
+  background: conic-gradient(from 210deg, transparent 0deg, rgb(11 101 216 / 0.2) 70deg, transparent 140deg);
   -webkit-mask-image: radial-gradient(closest-side, transparent 72%, #000 73%, #000 100%);
   mask-image: radial-gradient(closest-side, transparent 72%, #000 73%, #000 100%);
   animation: lp-spin 42s linear infinite;
   pointer-events: none;
+}
+
+/* International globe motif behind the product panel. */
+.lp-globe {
+  position: absolute;
+  z-index: 0;
+  top: 50%;
+  right: -22%;
+  width: 40rem;
+  height: 40rem;
+  translate: 0 -50%;
+  opacity: 0.55;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(closest-side, #000 42%, transparent 80%);
+  mask-image: radial-gradient(closest-side, #000 42%, transparent 80%);
 }
 
 /* Staggered entrance ------------------------------------------------- */
@@ -317,7 +351,7 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: radial-gradient(420px 240px at 78% 0%, var(--lp-bento-glow, rgb(47 123 240 / 0.16)), transparent 72%);
+  background: radial-gradient(420px 240px at 78% 0%, var(--lp-bento-glow, rgb(11 101 216 / 0.16)), transparent 72%);
   opacity: 0;
   transition: opacity 0.55s var(--lp-ease);
 }
@@ -492,7 +526,7 @@
 
 .lp-nav-link {
   position: relative;
-  color: rgb(255 255 255 / 0.72);
+  color: rgb(255 255 255 / 0.7);
   transition: color 0.25s ease;
 }
 
@@ -501,9 +535,10 @@
   position: absolute;
   left: 0;
   right: 0;
-  bottom: -0.35rem;
-  height: 1px;
-  background: currentColor;
+  bottom: -0.4rem;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--color-lp-sky-soft);
   transform: scaleX(0);
   transform-origin: left;
   transition: transform 0.35s var(--lp-ease);
@@ -517,12 +552,28 @@
   transform: scaleX(1);
 }
 
+.lp-nav-link[data-active='true'] {
+  color: #fff;
+}
+
+.lp-nav-link[data-active='true']::after {
+  transform: scaleX(1);
+}
+
 .lp-nav-scrolled .lp-nav-link {
   color: var(--color-lp-muted);
 }
 
 .lp-nav-scrolled .lp-nav-link:hover {
   color: var(--color-lp-ink);
+}
+
+.lp-nav-scrolled .lp-nav-link[data-active='true'] {
+  color: var(--color-lp-brand);
+}
+
+.lp-nav-scrolled .lp-nav-link[data-active='true']::after {
+  background: var(--color-lp-brand);
 }
 
 .lp-menu {
@@ -550,10 +601,25 @@
 }
 
 .lp-grad-text {
-  background: linear-gradient(94deg, #8fc0ff 0%, #d9ecff 42%, #7fe3b0 100%);
+  background: linear-gradient(96deg, #9cc6ff 0%, #dbeaff 40%, #7fe3b0 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+/* Shared dark tile used by the destination and trust cards. */
+.lp-dark-tile {
+  background:
+    radial-gradient(420px 240px at 88% 0%, rgb(11 101 216 / 0.36), transparent 70%),
+    radial-gradient(360px 240px at 0% 100%, rgb(0 155 99 / 0.3), transparent 70%),
+    linear-gradient(160deg, #0b1421 0%, #080b10 100%);
+}
+
+/* Thin brand rule that ties section headers together. */
+.lp-brand-rule {
+  height: 3px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, var(--color-lp-brand) 0%, var(--color-lp-sky) 48%, var(--color-lp-mint-2) 100%);
 }
 
 .lp-scroll-hint {

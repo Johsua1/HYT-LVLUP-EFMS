@@ -31,13 +31,53 @@ const SALARY_ROWS = [
   { code: 'AU', label: 'Australia', value: 185, width: 100 },
 ];
 
+/** Wireframe globe — the international motif behind the product panel. */
+function GlobeMark() {
+  return (
+    <svg viewBox="0 0 480 480" className="lp-globe hidden lg:block" aria-hidden>
+      <defs>
+        <linearGradient id="lp-globe-line" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#0b65d8" />
+          <stop offset="55%" stopColor="#4e90e8" />
+          <stop offset="100%" stopColor="#33d68c" />
+        </linearGradient>
+      </defs>
+      <g fill="none" stroke="url(#lp-globe-line)" strokeWidth="1.1">
+        <circle cx="240" cy="240" r="196" />
+        <ellipse cx="240" cy="240" rx="196" ry="72" />
+        <ellipse cx="240" cy="240" rx="196" ry="134" />
+        <ellipse cx="240" cy="240" rx="72" ry="196" />
+        <ellipse cx="240" cy="240" rx="134" ry="196" />
+        <line x1="44" y1="240" x2="436" y2="240" />
+      </g>
+      <g fill="#33d68c">
+        <circle cx="148" cy="182" r="3.4" />
+        <circle cx="292" cy="140" r="2.8" />
+        <circle cx="334" cy="268" r="3.2" />
+        <circle cx="204" cy="330" r="2.6" />
+      </g>
+      <g fill="#4e90e8">
+        <circle cx="120" cy="268" r="2.6" />
+        <circle cx="262" cy="212" r="3.4" />
+        <circle cx="360" cy="196" r="2.4" />
+      </g>
+      <g stroke="url(#lp-globe-line)" strokeWidth="1" fill="none" strokeDasharray="3 5" opacity="0.7">
+        <path d="M148 182 Q232 150 292 140" />
+        <path d="M262 212 Q312 236 334 268" />
+        <path d="M120 268 Q168 306 204 330" />
+      </g>
+    </svg>
+  );
+}
+
 function DiscoveryRow({ employer }: { employer: SampleEmployer }) {
   return (
     <div className="flex items-center gap-2.5 py-2.5">
       <Flag code={employer.code} className="h-7 w-10" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <p className="text-[11.5px] font-semibold whitespace-nowrap text-[#0a1322]">{employer.country}</p>          {employer.verification === 'Verified' ? (
+          <p className="text-[11.5px] font-semibold whitespace-nowrap text-[#17212f]">{employer.country}</p>
+          {employer.verification === 'Verified' ? (
             <BadgeCheck className="h-3.5 w-3.5 shrink-0 text-[#0a7f4a]" aria-label="Verified sample record" />
           ) : (
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#f59e0b]" aria-label="Under review" />
@@ -48,7 +88,7 @@ function DiscoveryRow({ employer }: { employer: SampleEmployer }) {
         </p>
       </div>
       <div className="shrink-0 text-right">
-        <p className="text-[11px] font-semibold text-[#0a1322] tabular-nums">
+        <p className="text-[11px] font-semibold text-[#17212f] tabular-nums">
           {salaryRange(employer.salaryMin, employer.salaryMax)}
         </p>
         <p className="text-[9.5px] text-[#64748b]">
@@ -63,13 +103,13 @@ function VerificationCard() {
   return (
     <div className="lp-glass-light w-[196px] rounded-xl p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-[9.5px] font-semibold tracking-[0.12em] text-[#586a82] uppercase">
+        <span className="flex items-center gap-1.5 text-[9.5px] font-semibold tracking-[0.12em] text-[#64748b] uppercase">
           <ShieldCheck className="h-3.5 w-3.5 text-[#0a7f4a]" aria-hidden />
           Verification
         </span>
         <SampleTag />
       </div>
-      <p className="mt-2 text-[12px] font-semibold text-[#0a1322]">Documents complete</p>
+      <p className="mt-2 text-[12px] font-semibold text-[#17212f]">Documents complete</p>
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-[#e6edf6]">
         <div
           className="h-full rounded-full bg-gradient-to-r from-[#0a7f4a] to-[#33d68c]"
@@ -102,7 +142,7 @@ function SalaryCard() {
             </div>
             <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-[#2f7bf0] to-[#33d68c]"
+                className="h-full rounded-full bg-gradient-to-r from-[#0b65d8] to-[#33d68c]"
                 style={{ width: `${row.width}%` }}
               />
             </div>
@@ -136,7 +176,7 @@ export function Hero() {
   };
 
   return (
-    <section className="lp-hero relative overflow-hidden pt-28 pb-24 sm:pb-28 lg:pt-32 lg:pb-32">
+    <section className="lp-hero relative overflow-hidden pt-32 pb-24 sm:pb-28 lg:pt-36 lg:pb-32">
       <div className="lp-hero-grid" aria-hidden />
       <div className="lp-hero-glow lp-hero-glow--blue" aria-hidden />
       <div className="lp-hero-glow lp-hero-glow--mint" aria-hidden />
@@ -148,26 +188,32 @@ export function Hero() {
         {/* Copy -------------------------------------------------------- */}
         <div className="max-w-xl">
           <div className="lp-rise" style={{ '--lp-d': '0ms' } as Vars}>
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-1.5 text-[11px] font-medium text-white/70 backdrop-blur">
+            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/12 bg-white/[0.06] px-3.5 py-1.5 text-[11px] font-medium text-white/75 backdrop-blur">
               <span className="relative flex h-1.5 w-1.5" aria-hidden>
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#33d68c] opacity-60" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#33d68c]" />
               </span>
               Employer Filtering Management System
+              <span className="hidden h-3 w-px bg-white/15 sm:block" aria-hidden />
+              <span className="hidden text-[#7fe3b0] sm:inline">Level Up International</span>
             </span>
           </div>
 
           <h1
-            className="lp-rise mt-6 text-[clamp(2.25rem,4.2vw,3.3rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-white"
+            className="lp-rise mt-6 text-[clamp(2.35rem,4.3vw,3.5rem)] leading-[1.04] font-bold tracking-[-0.045em] text-white"
             style={{ '--lp-d': '80ms' } as Vars}
           >
             Find the{' '}
-            <span className="lp-display text-[1.08em] text-[#7fe3b0] italic">right</span> employers.
-            <span className="mt-1.5 block text-white/90">Make smarter employment decisions.</span>
+            <span className="lp-display bg-gradient-to-r from-[#5fe0a4] via-[#33d68c] to-[#1fae6f] bg-clip-text text-transparent">
+              right employers.
+            </span>
+            <span className="mt-2.5 block text-[0.8em] leading-[1.14] font-semibold tracking-[-0.035em] text-white/90">
+              Make smarter employment decisions.
+            </span>
           </h1>
 
           <p
-            className="lp-rise mt-6 max-w-xl text-[15px] leading-[1.75] text-white/60 sm:text-[16px]"
+            className="lp-rise mt-6 max-w-xl text-[15px] leading-[1.75] text-white/62 sm:text-[15.5px]"
             style={{ '--lp-d': '170ms' } as Vars}
           >
             Discover, filter and compare international employers in one centralized platform. Evaluate job
@@ -182,16 +228,16 @@ export function Hero() {
             <button
               type="button"
               onClick={() => scrollToSection('explore')}
-              className="lp-cta-primary group inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-white px-5 text-[13.5px] font-semibold text-[#0a1322] transition-colors hover:bg-[#e9eff8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="lp-cta-primary group inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#0b65d8] px-5 text-[13.5px] font-semibold text-white shadow-[0_16px_36px_-16px_rgba(11,101,216,0.95)] transition-colors hover:bg-[#0756b8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7fb2ff]"
             >
               Explore employers
               <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" aria-hidden />
             </button>
             <Link
               to="/login"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/15 bg-white/[0.06] px-5 text-[13.5px] font-medium text-white backdrop-blur transition-colors hover:border-white/25 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-lg border border-white/16 bg-white/[0.05] px-5 text-[13.5px] font-medium text-white backdrop-blur transition-colors hover:border-[#33d68c]/45 hover:bg-white/[0.09] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
             >
-              <LogIn className="h-4 w-4" aria-hidden />
+              <LogIn className="h-4 w-4 text-[#7fe3b0]" aria-hidden />
               Access dashboard
             </Link>
           </div>
@@ -222,8 +268,9 @@ export function Hero() {
           onPointerLeave={resetPointer}
           className="relative mx-auto w-full max-w-[560px] lg:max-w-none"
         >
+          <GlobeMark />
           <div
-            className="absolute -inset-10 -z-10 rounded-full bg-[#2f7bf0]/10 blur-3xl"
+            className="absolute -inset-10 -z-10 rounded-full bg-[#0b65d8]/12 blur-3xl"
             aria-hidden
           />
           <div
@@ -231,21 +278,25 @@ export function Hero() {
             aria-hidden
           />
 
-          <div className="lp-panel lp-panel-in relative z-10 rounded-2xl p-4 text-[#0a1322] sm:p-5">
+          <div className="lp-panel lp-panel-in relative z-10 overflow-hidden rounded-2xl p-4 text-[#17212f] sm:p-5">
+            <div
+              className="absolute inset-x-0 top-0 h-[3px] bg-gradient-to-r from-[#044aa9] via-[#0b65d8] to-[#0a7f4a]"
+              aria-hidden
+            />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-[9.5px] font-semibold tracking-[0.18em] text-[#044aa9] uppercase">
                   Employer discovery
                 </p>
-                <p className="mt-1 text-[15px] font-semibold tracking-[-0.01em]">Compare before you commit</p>
+                <p className="mt-1 text-[15px] font-bold tracking-[-0.015em]">Compare before you commit</p>
               </div>
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#f1f5fb] px-2 py-1 text-[10px] font-medium text-[#586a82]">
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-[#f1f5f9] px-2 py-1 text-[10px] font-medium text-[#64748b]">
                 <SlidersHorizontal className="h-3 w-3" aria-hidden />
                 Filters
               </span>
             </div>
 
-            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#e2e8f1] bg-[#f8fafd] px-2.5 py-2">
+            <div className="mt-3 flex items-center gap-2 rounded-lg border border-[#e5eaf0] bg-[#f8fafd] px-2.5 py-2">
               <Search className="h-3.5 w-3.5 text-[#64748b]" aria-hidden />
               <span className="text-[11.5px] text-[#64748b]">Search employers, positions, countries</span>
             </div>
@@ -258,7 +309,7 @@ export function Hero() {
                     'shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium',
                     index === 0
                       ? 'bg-[#044aa9] text-white'
-                      : 'bg-[#f1f5fb] text-[#586a82] ring-1 ring-[#e2e8f1]',
+                      : 'bg-[#f1f5f9] text-[#64748b] ring-1 ring-[#e5eaf0]',
                   )}
                 >
                   {chip}
@@ -273,7 +324,7 @@ export function Hero() {
             </div>
 
             <div className="mt-3 flex items-center justify-between gap-2 rounded-lg bg-[#f8fafd] px-2.5 py-2">
-              <span className="text-[9.5px] text-[#586a82]">Showing 4 of 10 sample employers</span>
+              <span className="text-[9.5px] text-[#64748b]">Showing 4 of 10 sample employers</span>
               <span className="inline-flex items-center gap-1 text-[9.5px] font-semibold text-[#044aa9]">
                 View all
                 <ArrowRight className="h-3 w-3" aria-hidden />
@@ -304,7 +355,7 @@ export function Hero() {
                     </span>
                   ))}
                 </div>
-                <span className="text-[10px] font-semibold text-[#0a1322]">10 countries</span>
+                <span className="text-[10px] font-semibold text-[#17212f]">10 countries</span>
                 <span className="text-[9px] text-[#64748b]">in the dataset</span>
               </div>
             </div>
@@ -328,7 +379,7 @@ export function Hero() {
                 <ReceiptText className="h-3.5 w-3.5 text-[#044aa9]" aria-hidden />
                 <div>
                   <p className="text-[8.5px] text-[#64748b]">Est. processing fee</p>
-                  <p className="text-[11px] font-semibold text-[#0a1322] tabular-nums">₱18,000</p>
+                  <p className="text-[11px] font-semibold text-[#17212f] tabular-nums">₱18,000</p>
                 </div>
               </div>
             </div>
@@ -338,7 +389,7 @@ export function Hero() {
 
       <div className="relative mx-auto mt-14 hidden max-w-7xl px-8 lg:block">
         <div className="flex items-center gap-3 text-[10px] tracking-[0.18em] text-white/35 uppercase">
-          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+          <CheckCircle2 className="h-3.5 w-3.5 text-[#33d68c]/70" aria-hidden />
           Illustrative sample records · not live employer listings
         </div>
       </div>

@@ -16,9 +16,24 @@ const NAV_LINKS = [
 export function LandingNav() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [active, setActive] = useState<string | null>(null);
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    const onScroll = () => {
+      setScrolled(window.scrollY > 24);
+
+      /* Lightweight scroll-spy: the active item is the last section whose
+         top edge has passed the header. */
+      let current: string | null = null;
+      for (const link of NAV_LINKS) {
+        const node = document.getElementById(link.id);
+        if (!node) continue;
+        if (node.getBoundingClientRect().top <= 140) current = link.id;
+      }
+      /* Past the last tracked section (why / CTA / footer) nothing is active. */
+      if (window.scrollY + window.innerHeight > document.documentElement.scrollHeight - 320) current = null;
+      setActive(current);
+    };
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
@@ -45,52 +60,44 @@ export function LandingNav() {
       className={cn(
         'fixed inset-x-0 top-0 z-50 border-b transition-[background-color,border-color,box-shadow] duration-300',
         solid
-          ? 'lp-nav-scrolled border-lp-line bg-[#f5f7fb]/92 shadow-[0_18px_40px_-34px_rgba(10,19,34,0.65)] backdrop-blur-xl'
+          ? 'lp-nav-scrolled border-lp-line bg-[#f5f7fa]/92 shadow-[0_18px_40px_-34px_rgba(8,11,16,0.65)] backdrop-blur-xl'
           : 'border-transparent bg-transparent',
       )}
     >
-      <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
+      <div className="mx-auto flex h-[76px] max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
         <Link
           to="/"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="group flex items-center gap-2.5 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#7fb2ff]"
-          aria-label="Employer Filtering Management System — back to top"
+          className="group flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#0b65d8]"
+          aria-label="Level Up International Manpower Services Corp. — back to top"
         >
           <img
             src={logo}
             alt="Level Up International Manpower Services Corp."
             className={cn(
-              'h-7 w-auto transition-[transform,filter] duration-300 group-hover:-translate-y-0.5',
-              !solid && 'brightness-[1.8]',
+              'h-10 w-auto transition-transform duration-300 group-hover:-translate-y-0.5 sm:h-11',
+              !solid && 'lp-logo-on-dark',
             )}
           />
-          <span className="hidden sm:block">
-            <span
-              className={cn(
-                'block text-[11px] leading-none font-bold tracking-[0.16em] uppercase transition-colors',
-                solid ? 'text-lp-ink' : 'text-white',
-              )}
-            >
-              EFMS
-            </span>
-            <span
-              className={cn(
-                'mt-1 block text-[10px] leading-none transition-colors',
-                solid ? 'text-lp-muted' : 'text-white/55',
-              )}
-            >
-              Employer Filtering System
-            </span>
+          <span
+            className={cn(
+              'max-w-[150px] text-[9.5px] leading-[1.32] font-semibold tracking-[0.005em] text-balance transition-colors md:max-w-none md:text-[10.5px]',
+              solid ? 'text-lp-ink' : 'text-white/90',
+            )}
+          >
+            Employer Filtering Management System
           </span>
         </Link>
 
-        <nav aria-label="Landing page" className="hidden items-center gap-7 lg:flex">
+        <nav aria-label="Landing page" className="hidden items-center gap-6 xl:flex">
           {NAV_LINKS.map((link) => (
             <button
               key={link.id}
               type="button"
               onClick={() => go(link.id)}
-              className="lp-nav-link text-[13px] font-medium"
+              data-active={active === link.id}
+              aria-current={active === link.id ? 'true' : undefined}
+              className="lp-nav-link text-[13px] font-medium whitespace-nowrap"
             >
               {link.label}
             </button>
@@ -101,8 +108,10 @@ export function LandingNav() {
           <Link
             to="/login"
             className={cn(
-              'hidden items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors sm:inline-flex',
-              solid ? 'text-lp-muted hover:bg-[#eef2f8] hover:text-lp-ink' : 'text-white/75 hover:bg-white/10 hover:text-white',
+              'hidden items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-medium whitespace-nowrap transition-colors sm:inline-flex',
+              solid
+                ? 'text-lp-muted hover:bg-[#eef2f8] hover:text-lp-ink'
+                : 'text-white/75 hover:bg-white/10 hover:text-white',
             )}
           >
             <LogIn className="h-3.5 w-3.5" aria-hidden />
@@ -112,13 +121,7 @@ export function LandingNav() {
           <button
             type="button"
             onClick={() => go('explore')}
-            className={cn(
-              'lp-cta-primary hidden items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold transition-colors sm:inline-flex',
-              'focus-visible:outline-2 focus-visible:outline-offset-2',
-              solid
-                ? 'bg-lp-brand text-white hover:bg-[#053d89] focus-visible:outline-[#044aa9]'
-                : 'bg-white text-[#0a1322] hover:bg-[#e9eff8] focus-visible:outline-white',
-            )}
+            className="lp-cta-primary hidden items-center gap-1.5 rounded-lg bg-[#0b65d8] px-4 py-2.5 text-[13px] font-semibold whitespace-nowrap text-white shadow-[0_10px_24px_-14px_rgba(11,101,216,0.9)] transition-colors hover:bg-[#044aa9] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0b65d8] sm:inline-flex"
           >
             Explore employers
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -131,7 +134,7 @@ export function LandingNav() {
             aria-controls="landing-mobile-menu"
             aria-label={open ? 'Close menu' : 'Open menu'}
             className={cn(
-              'inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors lg:hidden',
+              'inline-flex h-10 w-10 items-center justify-center rounded-lg transition-colors xl:hidden',
               solid ? 'text-lp-ink hover:bg-[#eef2f8]' : 'text-white hover:bg-white/10',
             )}
           >
@@ -143,7 +146,7 @@ export function LandingNav() {
       {open ? (
         <div
           id="landing-mobile-menu"
-          className="lp-menu border-lp-line bg-lp-surface absolute inset-x-3 top-[calc(100%+8px)] rounded-xl border p-3 shadow-[0_30px_70px_-30px_rgba(10,19,34,0.45)] lg:hidden"
+          className="lp-menu border-lp-line bg-lp-surface absolute inset-x-3 top-[calc(100%+8px)] rounded-xl border p-3 shadow-[0_30px_70px_-30px_rgba(8,11,16,0.45)] xl:hidden"
         >
           <nav aria-label="Landing page (mobile)" className="flex flex-col">
             {NAV_LINKS.map((link) => (
@@ -151,10 +154,18 @@ export function LandingNav() {
                 key={link.id}
                 type="button"
                 onClick={() => go(link.id)}
-                className="text-lp-ink hover:bg-lp-paper flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium"
+                className={cn(
+                  'flex items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors',
+                  active === link.id
+                    ? 'bg-[#eef5fe] text-[#044aa9]'
+                    : 'text-lp-ink hover:bg-lp-paper',
+                )}
               >
                 {link.label}
-                <ArrowRight className="text-lp-muted h-3.5 w-3.5" aria-hidden />
+                <ArrowRight
+                  className={cn('h-3.5 w-3.5', active === link.id ? 'text-[#044aa9]' : 'text-lp-muted')}
+                  aria-hidden
+                />
               </button>
             ))}
           </nav>
@@ -162,14 +173,14 @@ export function LandingNav() {
             <button
               type="button"
               onClick={() => go('explore')}
-              className="bg-lp-brand hover:bg-lp-brand/90 inline-flex h-10 items-center justify-center gap-2 rounded-lg text-sm font-semibold text-white"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#0b65d8] text-sm font-semibold text-white transition-colors hover:bg-[#044aa9]"
             >
               Explore employers
               <ArrowRight className="h-4 w-4" aria-hidden />
             </button>
             <Link
               to="/login"
-              className="border-lp-line text-lp-ink hover:bg-lp-paper inline-flex h-10 items-center justify-center gap-2 rounded-lg border text-sm font-medium"
+              className="border-lp-line text-lp-ink hover:bg-lp-paper inline-flex h-10 items-center justify-center gap-2 rounded-lg border text-sm font-medium transition-colors"
             >
               <LogIn className="h-4 w-4" aria-hidden />
               Sign in to the system

@@ -20,13 +20,13 @@ export function HowItWorks() {
             title={
               <>
                 From searching to smarter{' '}
-                <span className="lp-display text-[1.06em] text-[#044aa9] italic">employer evaluation.</span>
+                <span className="text-[#044aa9]">employer evaluation.</span>
               </>
             }
             description="Four steps, one continuous record. Every stage feeds the next, so an assessment is backed by the same employer data from start to finish."
           />
           <Reveal delay={200} className="shrink-0">
-            <div className="border-lp-line flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-[10.5px] text-[#586a82]">
+            <div className="border-lp-line inline-flex items-center gap-2 rounded-lg border bg-white px-3 py-2 text-[10.5px] text-[#64748b]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#0a7f4a]" aria-hidden />
               Sample workflow · 4 stages
             </div>
@@ -36,10 +36,10 @@ export function HowItWorks() {
         <div ref={ref}>
           {/* Desktop timeline --------------------------------------- */}
           <div className="relative mt-16 hidden lg:block">
-            <div className="absolute top-[22px] h-px bg-[#e2e8f1]" style={{ left: 22, right: 'calc(25% - 22px)' }} />
+            <div className="absolute top-[22px] h-px bg-[#e5eaf0]" style={{ left: 22, right: 'calc(25% - 22px)' }} />
             <div
               className={cn(
-                'lp-line-fill absolute top-[22px] h-px bg-gradient-to-r from-[#044aa9] via-[#2f7bf0] to-[#0a7f4a]',
+                'lp-line-fill absolute top-[22px] h-px bg-gradient-to-r from-[#044aa9] via-[#0b65d8] to-[#0a7f4a]',
                 inView && 'is-in',
               )}
               style={{ left: 22, right: 'calc(25% - 22px)' }}
@@ -51,11 +51,17 @@ export function HowItWorks() {
                 return (
                   <li key={step.index}>
                     <Reveal delay={index * 110}>
-                      <span className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full border border-[#d9e8fd] bg-white text-[11px] font-bold text-[#044aa9] shadow-[0_0_0_7px_#f5f7fb]">
+                      <span className="relative z-10 flex h-11 w-11 items-center justify-center rounded-full border border-[#d9e8fd] bg-white font-display text-[12px] font-bold text-[#044aa9] shadow-[0_0_0_7px_#f5f7fa]">
                         {step.index}
                       </span>
                       <div className="mt-6 max-w-[240px]">
-                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#eef5fe] text-[#044aa9] ring-1 ring-[#d9e8fd]">
+                        <span
+                          className={
+                            index === LANDING_STEPS.length - 1
+                              ? 'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#effdf7] text-[#0a7f4a] ring-1 ring-[#b3f0d4]'
+                              : 'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[#eef5fe] text-[#044aa9] ring-1 ring-[#d9e8fd]'
+                          }
+                        >
                           <Icon className="h-4 w-4" aria-hidden />
                         </span>
                         <h3 className="text-lp-ink mt-3 text-[15px] font-semibold">{step.title}</h3>
@@ -69,10 +75,10 @@ export function HowItWorks() {
           </div>
 
           {/* Mobile timeline ---------------------------------------- */}
-          <ol className="relative mt-12 ml-4 space-y-9 border-l border-[#e2e8f1] pl-8 lg:hidden">
+          <ol className="relative mt-12 ml-4 space-y-9 border-l border-[#e5eaf0] pl-8 lg:hidden">
             <span
               className={cn(
-                'lp-line-fill-y absolute top-0 -left-px h-full w-px bg-gradient-to-b from-[#044aa9] via-[#2f7bf0] to-[#0a7f4a]',
+                'lp-line-fill-y absolute top-0 -left-px h-full w-px bg-gradient-to-b from-[#044aa9] via-[#0b65d8] to-[#0a7f4a]',
                 inView && 'is-in',
               )}
               aria-hidden
@@ -86,7 +92,12 @@ export function HowItWorks() {
                   </span>
                   <Reveal delay={index * 90}>
                     <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-[#044aa9]" aria-hidden />
+                      <Icon
+                        className={
+                          index === LANDING_STEPS.length - 1 ? 'h-4 w-4 text-[#0a7f4a]' : 'h-4 w-4 text-[#044aa9]'
+                        }
+                        aria-hidden
+                      />
                       <h3 className="text-lp-ink text-[15px] font-semibold">{step.title}</h3>
                     </div>
                     <p className="text-lp-muted mt-1.5 text-[12.5px] leading-relaxed">{step.description}</p>
@@ -98,7 +109,7 @@ export function HowItWorks() {
         </div>
 
         <Reveal delay={160}>
-          <div className="mt-14 flex flex-col items-start justify-between gap-4 rounded-xl border border-[#e2e8f1] bg-white px-5 py-4 sm:flex-row sm:items-center">
+          <div className="mt-14 flex flex-col items-start justify-between gap-4 rounded-xl border border-[#e5eaf0] bg-white px-5 py-4 sm:flex-row sm:items-center">
             <p className="text-lp-muted text-[12px]">
               <span className="text-lp-ink font-semibold">Every stage writes to the same record.</span> Nothing has to be
               re-entered when an employer moves from discovery to review.

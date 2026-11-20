@@ -22,7 +22,7 @@ const TONE: Record<string, string> = {
   directory: 'bg-[#effdf7] text-[#0a7f4a] ring-[#b3f0d4]',
   comparison: 'bg-[#eef5fe] text-[#044aa9] ring-[#d9e8fd]',
   fees: 'bg-[#effdf7] text-[#0a7f4a] ring-[#b3f0d4]',
-  contracts: 'bg-[#fffbeb] text-[#b45309] ring-[#fde68a]',
+  contracts: 'bg-[#eef5fe] text-[#044aa9] ring-[#d9e8fd]',
   requirements: 'bg-[#eef5fe] text-[#044aa9] ring-[#d9e8fd]',
   verification: 'bg-[#effdf7] text-[#0a7f4a] ring-[#b3f0d4]',
   reports: 'bg-[#eef5fe] text-[#044aa9] ring-[#d9e8fd]',
@@ -47,7 +47,7 @@ function FilterVisual() {
             key={chip}
             className={cn(
               'rounded-full px-2 py-1 text-[9.5px] font-medium',
-              index === 0 ? 'bg-[#044aa9] text-white' : 'bg-white text-[#586a82] ring-1 ring-[#e2e8f1]',
+              index === 0 ? 'bg-[#044aa9] text-white' : 'bg-white text-[#64748b] ring-1 ring-[#e5eaf0]',
             )}
           >
             {chip}
@@ -131,7 +131,7 @@ function FeesVisual() {
           </div>
         ))}
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#e2e8f1] pt-2 text-[10.5px]">
+      <div className="mt-2 flex items-center justify-between gap-2 border-t border-[#e5eaf0] pt-2 text-[10.5px]">
         <span className="text-lp-ink font-semibold">Estimated total</span>
         <span className="text-lp-ink font-semibold tabular-nums">₱47,200</span>
       </div>
@@ -261,13 +261,13 @@ export function FeaturesBento() {
             title={
               <>
                 A complete employer{' '}
-                <span className="lp-display text-[1.06em] text-[#0a7f4a] italic">evaluation workspace.</span>
+                <span className="text-[#0a7f4a]">evaluation workspace.</span>
               </>
             }
             description="Eight connected capabilities cover the full path from discovery to a documented, comparable assessment."
           />
           <Reveal delay={200} className="shrink-0">
-            <div className="border-lp-line flex items-center gap-2 rounded-lg border bg-[#f8fafd] px-3 py-2">
+            <div className="border-lp-line inline-flex items-center gap-2 rounded-lg border bg-[#f8fafd] px-3 py-2">
               <SampleTag />
               <span className="text-lp-muted text-[10.5px]">Illustrative screens</span>
             </div>
@@ -283,7 +283,7 @@ export function FeaturesBento() {
               <Reveal key={feature.key} delay={index * 45} className={cn('h-full', LAYOUT[feature.key])}>
                 <article
                   className={cn(
-                    'lp-bento group flex h-full flex-col rounded-xl border border-[#e2e8f1] bg-white p-5 transition-colors duration-300 hover:border-[#044aa9]/25 sm:p-6',
+                    'lp-bento group flex h-full flex-col rounded-2xl border border-[#e5eaf0] bg-white p-5 transition-[border-color,box-shadow] duration-300 hover:border-[#044aa9]/30 hover:shadow-[0_26px_60px_-40px_rgba(8,11,16,0.5)] sm:p-6',
                     large && 'lg:p-7',
                     reports && 'lg:flex-row lg:items-end lg:gap-10',
                   )}
@@ -293,7 +293,7 @@ export function FeaturesBento() {
                     <div className="flex items-start justify-between gap-3">
                       <span
                         className={cn(
-                          'lp-bento-icon inline-flex h-10 w-10 items-center justify-center rounded-lg ring-1',
+                          'lp-bento-icon inline-flex h-10 w-10 items-center justify-center rounded-xl ring-1',
                           TONE[feature.key],
                         )}
                       >
