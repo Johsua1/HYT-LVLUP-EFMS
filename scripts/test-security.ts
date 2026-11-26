@@ -21,7 +21,9 @@ import {
   sanitizeBackendMessage,
   sanitizeStorageFileName,
   validateDocumentFile,
+  emailProblem,
 } from '../src/lib/security';
+import { describeAuthError, parseAuthCallback, readAuthLinkError } from '../src/lib/authErrors';
 
 let passed = 0;
 let failed = 0;
@@ -118,6 +120,99 @@ checkTrue('looksLikeInternalError detects SQL', looksLikeInternalError('column "
 checkTrue('looksLikeInternalError ignores plain text', !looksLikeInternalError('Incorrect email or password.'));
 
 /* ------------------------------------------------------------------ */
+console.log('\n[email] emailProblem blocks the 400-causing submissions');
+checkTrue('empty is rejected', emailProblem('') !== null);
+checkTrue('whitespace only is rejected', emailProblem('   ') !== null);
+checkTrue('no @ is rejected', emailProblem('not-an-email') !== null);
+checkTrue('no TLD is rejected', emailProblem('name@company') !== null);
+checkTrue('space inside is rejected', emailProblem('na me@company.com') !== null);
+check('plain address is accepted', emailProblem('name@company.com'), null);
+check('surrounding whitespace is tolerated', emailProblem('  name@company.com  '), null);
+check('subdomain is accepted', emailProblem('name@mail.company.com.ph'), null);
+
+/* ------------------------------------------------------------------ */
+console.log('\n[auth] describeAuthError maps codes before raw messages');
+checkTrue(
+  'hourly email quota -> wait an hour',
+  /hour/i.test(describeAuthError({ code: 'over_email_send_rate_limit', status: 429, message: 'email rate limit exceeded' })),
+);
+checkTrue(
+  'message-only 429 is still recognised',
+  /hour/i.test(describeAuthError({ message: 'email rate limit exceeded', status: 429 })),
+);
+checkTrue(
+  'generic 429 does not claim the email quota',
+  !/hour/i.test(describeAuthError({ code: 'over_request_rate_limit', status: 429, message: 'Too many requests' })),
+);
+check(
+  'validation_failed email -> field message',
+  describeAuthError({ code: 'validation_failed', message: 'Unable to validate email address: invalid format' }),
+  'Enter a valid work email address.',
+);
+checkTrue('otp_expired -> link already used', /already been used|expired/i.test(describeAuthError({ code: 'otp_expired' })));
+checkTrue(
+  'flow_state_not_found -> link unusable',
+  /expired|already been used/i.test(describeAuthError({ code: 'flow_state_not_found', message: 'invalid flow state' })),
+);
+check('same_password stays actionable', describeAuthError({ code: 'same_password', message: 'New password should be different from the old password.' }), 'Choose a password you have not used before.');
+check('invalid login credentials keeps its wording', describeAuthError({ message: 'Invalid login credentials' }), 'Incorrect email or password.');
+check('network failure is friendly', describeAuthError({ message: 'Failed to fetch' }), 'Network error — check your connection and try again.');
+check(
+  'internal detail is still suppressed',
+  describeAuthError({ message: 'syntax error at or near "SELECT"' }),
+  'Something went wrong. Please try again.',
+);
+checkTrue('empty error never echoes raw text', describeAuthError(null).length > 0);
+
+console.log('\n[auth] readAuthLinkError parses the redirect parameters');
+check(
+  'error_code wins over error',
+  readAuthLinkError('?error=access_denied&error_code=otp_expired&error_description=x')?.code,
+  'otp_expired',
+);
+checkTrue(
+  'expired link copy mentions requesting a new one',
+  /request a new one/i.test(readAuthLinkError('?error_code=otp_expired')?.message ?? ''),
+);
+checkTrue(
+  'unknown code still produces a message',
+  (readAuthLinkError('?error_code=weird_thing')?.message ?? '').length > 0,
+);
+check('successful PKCE redirect has no error', readAuthLinkError('?code=abc-123'), null);
+check('bare error is used when error_code is absent', readAuthLinkError('?error=access_denied')?.code, 'access_denied');
+check('empty search is null', readAuthLinkError(''), null);
+
+console.log('\n[auth] parseAuthCallback distinguishes the link formats');
+const tokenLink = parseAuthCallback('https://app.example/#/login?token_hash=abc123&type=recovery');
+check('token_hash link yields a token', tokenLink.recoveryToken, 'abc123');
+checkTrue('token_hash link counts as an attempt', tokenLink.attempted);
+checkTrue('token_hash link is cleaned to #/login', (tokenLink.cleanUrl ?? '').endsWith('#/login'));
+checkTrue('token_hash link has no error', tokenLink.error === null);
+
+const pkceLink = parseAuthCallback('https://app.example/?code=9f8e7d');
+check('pkce code is not a token', pkceLink.recoveryToken, null);
+checkTrue('pkce code counts as an attempt', pkceLink.attempted);
+checkTrue('pkce code routes to sign-in', (pkceLink.cleanUrl ?? '').endsWith('#/login'));
+checkTrue('pkce code survives for the SDK', (pkceLink.cleanUrl ?? '').includes('code=9f8e7d'));
+
+const deadLink = parseAuthCallback('https://app.example/?error=access_denied&error_code=otp_expired');
+check('dead link reports its code', deadLink.error?.code, 'otp_expired');
+checkTrue('dead link counts as an attempt', deadLink.attempted);
+checkTrue('dead link is cleaned to #/login', (deadLink.cleanUrl ?? '').endsWith('#/login'));
+
+const hashError = parseAuthCallback('https://app.example/#/login?error_code=otp_expired');
+check('error in the hash is found too', hashError.error?.code, 'otp_expired');
+
+const inviteToken = parseAuthCallback('https://app.example/#/login?token_hash=abc&type=invite');
+check('non-recovery token is ignored', inviteToken.recoveryToken, null);
+checkTrue('non-recovery token is not treated as a callback', !inviteToken.attempted);
+
+const plainVisit = parseAuthCallback('https://app.example/#/login');
+check('plain visit is not an attempt', plainVisit.attempted, false);
+check('plain visit has nothing to clean', plainVisit.cleanUrl, null);
+check('plain visit has no token', plainVisit.recoveryToken, null);
+
+/* ------------------------------------------------------------------ */
 console.log('\n[redirect] resolveSafeRedirect only allows known origins');
 const allowed = ['https://efms.levelup.example', 'http://localhost:5173'];
 check('allowed origin kept', resolveSafeRedirect('https://efms.levelup.example/', allowed), 'https://efms.levelup.example/');
@@ -157,6 +252,18 @@ const config = read('supabase/config.toml');
 checkTrue('public signup disabled', /^enable_signup = false/m.test(config));
 checkTrue('email signup disabled', config.includes('enable_signup = false'));
 checkTrue('password min length >= 8', /minimum_password_length = 8/.test(config));
+
+/* A `{{ .ConfirmationURL }}` recovery link returns a PKCE code that only the
+   requesting browser can exchange; the token_hash form works everywhere. */
+console.log('\n[static] recovery email link');
+const recoveryTemplate = read('supabase/templates/recovery.html');
+checkTrue('uses token_hash', recoveryTemplate.includes('token_hash={{ .TokenHash }}'));
+checkTrue('no ConfirmationURL left', !recoveryTemplate.includes('{{ .ConfirmationURL }}'));
+checkTrue('lands on the sign-in route', recoveryTemplate.includes('#/login?token_hash='));
+/* `.RedirectTo` follows the origin the app asked from (production, a preview
+   deploy, or localhost); `.SiteURL` would always send users to one host. */
+checkTrue('link follows the requesting origin', recoveryTemplate.includes('{{ .RedirectTo }}#/login?token_hash='));
+checkTrue('no fixed SiteURL in the link', !recoveryTemplate.includes('{{ .SiteURL }}#/login'));
 
 console.log('\n[static] admin-staff Edge Function');
 const fn = read('supabase/functions/admin-staff/index.ts');

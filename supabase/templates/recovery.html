@@ -55,10 +55,24 @@
                 </table>
 
                 <!-- Activation button -->
+                <!--
+                  The link carries the token hash rather than the default
+                  confirmation URL. The default returns a PKCE `?code=` that can
+                  only be exchanged by the browser that requested the email (the
+                  verifier lives in that browser's localStorage), so opening it
+                  on a phone or in a mail app's browser silently failed. The app
+                  exchanges this token with verifyOtp({ type: 'recovery' }), which
+                  needs nothing from browser storage.
+
+                  The host is {{ .RedirectTo }} — the origin the app passed to
+                  resetPasswordForEmail — not {{ .SiteURL }}, so a request made
+                  from a preview deploy or from localhost comes back to the same
+                  place instead of always landing on the production domain.
+                -->
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">
                   <tr>
                     <td align="center" style="border-radius:10px;background-color:#044aa9;">
-                      <a href="{{ .ConfirmationURL }}"
+                      <a href="{{ .RedirectTo }}#/login?token_hash={{ .TokenHash }}&amp;type=recovery"
                          style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">
                         Set your password &amp; activate account
                       </a>
@@ -67,7 +81,7 @@
                 </table>
                 <p style="margin:0 0 24px;font-size:12px;line-height:1.6;color:#6b7280;">
                   Button not working? Copy and paste this secure link into your browser:<br />
-                  <a href="{{ .ConfirmationURL }}" style="color:#044aa9;word-break:break-all;">{{ .ConfirmationURL }}</a>
+                  <a href="{{ .RedirectTo }}#/login?token_hash={{ .TokenHash }}&amp;type=recovery" style="color:#044aa9;word-break:break-all;">{{ .RedirectTo }}#/login?token_hash={{ .TokenHash }}&amp;type=recovery</a>
                 </p>
 
                 <hr style="border:none;border-top:1px solid #e5e7eb;margin:0 0 24px;" />
@@ -89,7 +103,7 @@
                     <td valign="top" style="width:26px;padding:0 0 10px;font-weight:700;color:#044aa9;">3.</td>
                     <td style="padding:0 0 10px;">
                       Sign in at
-                      <a href="{{ .SiteURL }}" style="color:#044aa9;font-weight:600;">{{ .SiteURL }}</a>
+                      <a href="{{ .RedirectTo }}" style="color:#044aa9;font-weight:600;">{{ .RedirectTo }}</a>
                       using your login email and the password you just set.
                     </td>
                   </tr>

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, KeyRound, LogIn, Mail } from 'lucide-react';
 import { useAuth } from '@/auth/AuthProvider';
@@ -6,9 +6,46 @@ import { AuthFrame, Notice } from '@/components/auth/AuthFrame';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { passwordProblem } from '@/lib/security';
+import { emailProblem, passwordProblem } from '@/lib/security';
 
 type Mode = 'signin' | 'forgot' | 'reset';
+
+/**
+ * Minimum gap between recovery emails for the same address.
+ *
+ * Supabase Auth enforces its own 60-second `max_frequency` per address plus a
+ * project-wide hourly quota (`email_sent`). Holding the button for the same
+ * minute stops a user who has not seen the email yet from spending that quota
+ * on repeated clicks. The mark is persisted so a page refresh does not reset it.
+ */
+const RESET_COOLDOWN_MS = 60_000;
+const RESET_MARK_KEY = 'efms.resetLink.sentAt';
+
+interface ResetMark {
+  email: string;
+  at: number;
+}
+
+function readResetMark(): ResetMark | null {
+  try {
+    const raw = window.localStorage.getItem(RESET_MARK_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ResetMark>;
+    if (typeof parsed.email !== 'string' || typeof parsed.at !== 'number') return null;
+    return parsed.at + RESET_COOLDOWN_MS > Date.now() ? { email: parsed.email, at: parsed.at } : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeResetMark(mark: ResetMark | null) {
+  try {
+    if (mark) window.localStorage.setItem(RESET_MARK_KEY, JSON.stringify(mark));
+    else window.localStorage.removeItem(RESET_MARK_KEY);
+  } catch {
+    /* Private mode / storage disabled — the in-memory timer still applies. */
+  }
+}
 
 /**
  * Sign-in screen.
@@ -18,7 +55,16 @@ type Mode = 'signin' | 'forgot' | 'reset';
  * screen, and the invitee activates their account from the email link.
  */
 export default function AuthPage() {
-  const { signIn, requestPasswordReset, updatePassword, acceptInvitation, recoveryMode, clearRecovery } = useAuth();
+  const {
+    signIn,
+    requestPasswordReset,
+    updatePassword,
+    acceptInvitation,
+    recoveryMode,
+    clearRecovery,
+    linkError,
+    clearLinkError,
+  } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +74,39 @@ export default function AuthPage() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
 
+  const [resetMark, setResetMark] = useState<ResetMark | null>(() => readResetMark());
+  const [now, setNow] = useState(() => Date.now());
+
   const activeMode: Mode = recoveryMode ? 'reset' : mode;
+
+  /* Tick the resend countdown once a second, and drop the mark when it lapses. */
+  useEffect(() => {
+    if (!resetMark) return;
+    const id = window.setInterval(() => {
+      if (Date.now() - resetMark.at >= RESET_COOLDOWN_MS) {
+        writeResetMark(null);
+        setResetMark(null);
+      } else {
+        setNow(Date.now());
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [resetMark]);
+
+  const remainingSeconds = resetMark
+    ? Math.max(0, Math.ceil((resetMark.at + RESET_COOLDOWN_MS - now) / 1000))
+    : 0;
+  /* The cooldown is per address, so correcting a typo is never blocked. */
+  const cooling = Boolean(
+    resetMark && resetMark.email === email.trim().toLowerCase() && remainingSeconds > 0,
+  );
+
+  const startCooldown = (address: string) => {
+    const mark: ResetMark = { email: address.trim().toLowerCase(), at: Date.now() };
+    writeResetMark(mark);
+    setResetMark(mark);
+    setNow(mark.at);
+  };
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -36,12 +114,18 @@ export default function AuthPage() {
     setNotice(null);
     setPassword('');
     setConfirm('');
+    clearLinkError();
   };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    /* Guard the form's Enter key as well as the button: a second submit while
+       the first is in flight would send a second email. */
+    if (busy || cooling) return;
     setError(null);
     setNotice(null);
+    /* Acting on the form supersedes the notice about the link that failed. */
+    clearLinkError();
 
     if (activeMode === 'reset' && password !== confirm) {
       setError('The two passwords do not match.');
@@ -49,6 +133,13 @@ export default function AuthPage() {
     }
     if (activeMode === 'reset') {
       const problem = passwordProblem(password);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
+    if (activeMode !== 'reset') {
+      const problem = emailProblem(email);
       if (problem) {
         setError(problem);
         return;
@@ -64,8 +155,18 @@ export default function AuthPage() {
            MFA step, everyone else lands in their dashboard. */
       } else if (activeMode === 'forgot') {
         const result = await requestPasswordReset(email);
-        if (result.error) setError(result.error);
-        else setNotice(`If an account exists for ${email.trim()}, a password-reset link is on its way.`);
+        if (result.outcome === 'sent') {
+          startCooldown(email);
+          setNotice(
+            `If an account exists for ${email.trim()}, a reset link is on its way. ` +
+              'It can take a minute to arrive — check your spam folder before requesting another.',
+          );
+        } else {
+          /* A rate-limited request already used up the quota; hold the button
+             so the next attempt does not land on the same 429. */
+          if (result.outcome === 'rate-limited') startCooldown(email);
+          if (result.error) setError(result.error);
+        }
       } else {
         const result = await updatePassword(password);
         if (result.error) {
@@ -89,6 +190,7 @@ export default function AuthPage() {
       {activeMode !== 'reset' && (
         <Link
           to="/"
+          onClick={() => clearLinkError()}
           className="text-ink-500 hover:text-ink-800 mb-3 inline-flex items-center gap-1 text-xs font-medium"
         >
           <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> Back to overview
@@ -133,6 +235,7 @@ export default function AuthPage() {
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5" noValidate>
+          {linkError && <Notice tone="error">{linkError.message}</Notice>}
           {error && <Notice tone="error">{error}</Notice>}
           {notice && <Notice tone="success">{notice}</Notice>}
 
@@ -196,10 +299,25 @@ export default function AuthPage() {
             size="lg"
             block
             loading={busy}
+            disabled={cooling}
             icon={activeMode === 'forgot' ? <Mail /> : <LogIn />}
           >
-            {activeMode === 'signin' ? 'Sign in' : activeMode === 'forgot' ? 'Send reset link' : 'Update password'}
+            {activeMode === 'signin'
+              ? 'Sign in'
+              : activeMode === 'forgot'
+                ? busy
+                  ? 'Sending reset link…'
+                  : cooling
+                    ? `Resend in ${remainingSeconds}s`
+                    : 'Send reset link'
+                : 'Update password'}
           </Button>
+
+          {activeMode === 'forgot' && cooling && (
+            <p className="text-ink-500 text-center text-[11px] leading-relaxed">
+              One reset email per minute. Check your inbox and spam folder before requesting another.
+            </p>
+          )}
         </form>
 
         {activeMode === 'signin' && (

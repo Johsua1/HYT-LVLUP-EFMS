@@ -104,8 +104,26 @@ export function sanitizeStorageFileName(name: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* Password strength                                                   */
+/* Email + password validation                                        */
 /* ------------------------------------------------------------------ */
+
+/**
+ * Minimal email check for the auth forms.
+ *
+ * The forms use `noValidate` (so the browser never blocks submit), which means
+ * an empty or malformed address would otherwise reach Supabase Auth and come
+ * back as a 400 `validation_failed`. Catching it here keeps that request — and
+ * the console noise — from happening at all. The server remains the real gate.
+ */
+export function emailProblem(email: string): string | null {
+  const value = email.trim();
+  if (!value) return 'Enter your work email address.';
+  if (value.length > 254) return 'That email address is too long.';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
+    return 'Enter a valid email address, like name@company.com.';
+  }
+  return null;
+}
 
 /**
  * Minimum viable password policy enforced in the UI. Supabase Auth is the real

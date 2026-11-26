@@ -9,10 +9,27 @@ import {
   type ReactNode,
 } from 'react';
 import type { Factor, Session, User } from '@supabase/supabase-js';
-import { describeError, supabase } from '@/lib/supabase';
+import { describeAuthError, type AuthLinkError } from '@/lib/authErrors';
+import {
+  AUTH_CALLBACK_ATTEMPTED,
+  AUTH_LINK_ERROR,
+  AUTH_REDIRECT_URL,
+  RECOVERY_LINK,
+  describeError,
+  supabase,
+} from '@/lib/supabase';
+import { emailProblem } from '@/lib/security';
 import type { ProfileRow, ProfileStatus } from '@/lib/database.types';
 
 export type AppRole = 'admin' | 'staff';
+
+/**
+ * What actually happened to a password-recovery request. The UI needs this to
+ * decide whether to start a resend cooldown: `sent` and `rate-limited` both
+ * consumed (or exhausted) the mail quota, while `invalid` never left the
+ * browser and `failed` should not block a retry.
+ */
+export type PasswordResetOutcome = 'sent' | 'rate-limited' | 'failed' | 'invalid';
 
 /** TOTP enrollment payload handed to the UI (QR + manual secret). */
 export interface MfaEnrollment {
@@ -49,6 +66,9 @@ export interface AuthContextValue {
   mustSetPassword: boolean;
   /** True when the user arrived via a password-recovery link. */
   recoveryMode: boolean;
+  /** A recovery/invite link that Supabase rejected (expired or already used). */
+  linkError: AuthLinkError | null;
+  clearLinkError: () => void;
 
   /* --- MFA (TOTP) — mandatory for administrators ------------------------ */
   /** Admins must satisfy MFA before the app renders. */
@@ -64,7 +84,9 @@ export interface AuthContextValue {
 
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<{ error: string | null }>;
+  requestPasswordReset: (
+    email: string,
+  ) => Promise<{ error: string | null; outcome: PasswordResetOutcome }>;
   updatePassword: (password: string) => Promise<{ error: string | null }>;
   /** Promotes the caller invited → active after they set a password. */
   acceptInvitation: () => Promise<{ error: string | null }>;
@@ -85,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const [linkError, setLinkError] = useState<AuthLinkError | null>(AUTH_LINK_ERROR);
   const [mfa, setMfa] = useState<MfaState>(EMPTY_MFA);
   const mounted = useRef(true);
 
@@ -150,15 +173,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     mounted.current = true;
 
-    supabase.auth.getSession().then(async ({ data }) => {
+    const bootstrap = async () => {
+      /* A `token_hash` recovery link is exchanged here rather than by
+         `detectSessionInUrl`. That path needs no PKCE verifier, so the link
+         works when the email is opened on a phone or in a mail app's browser —
+         the case where `?code=` is silently ignored and the user is left on the
+         landing page. */
+      if (RECOVERY_LINK) {
+        const { error } = await supabase.auth.verifyOtp({ type: 'recovery', token_hash: RECOVERY_LINK });
+        if (!mounted.current) return;
+        if (error) {
+          console.warn('[efms] recovery link rejected:', error.code ?? error.status, error.message);
+          setLinkError({ code: error.code ?? 'recovery_failed', message: describeAuthError(error) });
+        } else {
+          setRecoveryMode(true);
+        }
+      }
+
+      const { data } = await supabase.auth.getSession();
       if (!mounted.current) return;
       setSession(data.session);
+
+      /* A link that carried a code or an error but produced no session — used
+         twice, opened in another browser, or consumed by a mail scanner — would
+         otherwise look like an ordinary visit to the landing page. */
+      if (!data.session && AUTH_CALLBACK_ATTEMPTED && !RECOVERY_LINK) {
+        setLinkError((current) =>
+          current ?? {
+            code: 'incomplete',
+            message:
+              'That link could not be completed in this browser. Request a new one below and open it in the same browser you used to ask for it.',
+          },
+        );
+      }
+
       if (data.session?.user) {
         setProfile(await loadProfile(data.session.user.id));
         await loadMfa(true);
       }
       if (mounted.current) setLoading(false);
-    });
+    };
+
+    void bootstrap();
 
     const { data: subscription } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!mounted.current) return;
@@ -199,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (/email not confirmed/i.test(error.message)) {
           return { error: 'Please confirm your email address before signing in.' };
         }
-        return { error: describeError(error) };
+        return { error: describeAuthError(error) };
       }
 
       /* Supabase Auth accepts the password of a disabled account, so the
@@ -225,16 +281,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const requestPasswordReset = useCallback<AuthContextValue['requestPasswordReset']>(async (email) => {
+    /* The forms use `noValidate`, so an empty or malformed address would reach
+       Auth and come back as a 400 `validation_failed`. Reject it locally: no
+       request, no console noise, and the message points at the field. */
+    const problem = emailProblem(email);
+    if (problem) return { error: problem, outcome: 'invalid' };
+
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: window.location.origin,
+      /* Same origin the app is served from, which must also be listed in the
+         project's redirect allow-list (Authentication → URL Configuration). */
+      redirectTo: AUTH_REDIRECT_URL,
     });
-    return { error: error ? describeError(error) : null };
+    if (!error) return { error: null, outcome: 'sent' };
+
+    /* Keep the code/status for debugging — the UI only gets the mapped text. */
+    console.warn('[efms] password reset request failed:', error.code ?? error.status, error.message);
+    const rateLimited = /over_email_send_rate_limit|email rate limit exceeded|over_request_rate_limit/i.test(
+      `${error.code ?? ''} ${error.message}`,
+    );
+    return { error: describeAuthError(error), outcome: rateLimited ? 'rate-limited' : 'failed' };
   }, []);
 
   const updatePassword = useCallback<AuthContextValue['updatePassword']>(async (password) => {
     const { error } = await supabase.auth.updateUser({ password });
-    return { error: error ? describeError(error) : null };
+    return { error: error ? describeAuthError(error) : null };
   }, []);
+
+  const clearLinkError = useCallback(() => setLinkError(null), []);
 
   const acceptInvitation = useCallback<AuthContextValue['acceptInvitation']>(async () => {
     const { error } = await supabase.rpc('accept_invitation');
@@ -351,6 +424,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isDisabled: accountStatus === 'disabled',
       mustSetPassword: accountStatus === 'invited',
       recoveryMode,
+      linkError,
+      clearLinkError,
       mfaRequired,
       mfaEnrolled: mfa.enrolled,
       mfaFactorId: mfa.factorId,
@@ -377,6 +452,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin,
       accountStatus,
       recoveryMode,
+      linkError,
+      clearLinkError,
       mfaRequired,
       mfa.enrolled,
       mfa.factorId,

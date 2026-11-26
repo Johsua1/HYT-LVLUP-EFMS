@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { parseAuthCallback, type AuthLinkError } from '@/lib/authErrors';
 import { sanitizeBackendMessage } from '@/lib/security';
 
 /**
@@ -34,6 +35,34 @@ export const supabase: SupabaseClient = createClient(
 
 /** The private bucket that stores uploaded compliance documents. */
 export const DOCUMENTS_BUCKET = 'documents';
+
+/**
+ * Auth callbacks carried on the URL of the first page load.
+ *
+ * Read once at module load because the URL is cleaned up afterwards — and, for
+ * a PKCE `?code=`, because supabase-js removes the parameter itself.
+ */
+const AUTH_CALLBACK = parseAuthCallback(window.location.href);
+
+/** A dead or already-used link reported by Supabase (`?error_code=…`). */
+export const AUTH_LINK_ERROR: AuthLinkError | null = AUTH_CALLBACK.error;
+
+/** `token_hash` from a recovery email, to be exchanged with `verifyOtp`. */
+export const RECOVERY_LINK: string | null = AUTH_CALLBACK.recoveryToken;
+
+/**
+ * True when the page was opened by a sign-in link of some kind. If no session
+ * results, the user is told why instead of being dropped on the landing page.
+ */
+export const AUTH_CALLBACK_ATTEMPTED: boolean = AUTH_CALLBACK.attempted;
+
+/* Strip a spent token or a reported error so a refresh does not replay it, and
+   land on the sign-in screen — the only place that can explain the failure and
+   offer a fresh link. Done before React mounts so the router never has to be
+   corrected after the fact. */
+if (AUTH_CALLBACK.cleanUrl) {
+  window.history.replaceState(window.history.state, '', AUTH_CALLBACK.cleanUrl);
+}
 
 /**
  * Creates a short-lived signed URL for a private storage object. The bucket is
